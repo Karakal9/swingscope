@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: swingscope-web
+    env: python
+    buildCommand: "pip install -r swingscope/requirements.txt && pip install fastapi uvicorn python-multipart jinja2"
+    startCommand: "cd swingscope && uvicorn app:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.0

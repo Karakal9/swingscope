@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SwingScope Analyzer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            /* Deep modern dark blue/slate */
+            --surface-color: #1e293b;
+            --primary-color: #3b82f6;
+            --primary-hover: #2563eb;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border-color: #334155;
+            --error-color: #ef4444;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: block;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── Header & Search Area ── */
+        .search-container {
+            padding: 2rem 1.5rem;
+            background: linear-gradient(180deg, rgba(30, 41, 59, 1) 0%, rgba(15, 23, 42, 1) 100%);
+            border-bottom: 1px solid var(--border-color);
+            text-align: center;
+            position: relative;
+        }
+
+        .logo {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: var(--text-main);
+            letter-spacing: -0.5px;
+        }
+
+        .logo span {
+            color: var(--primary-color);
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            margin-bottom: 2rem;
+            font-weight: 400;
+        }
+
+        .search-form {
+            display: flex;
+            max-width: 500px;
+            margin: 0 auto;
+            gap: 0.5rem;
+        }
+
+        .search-input {
+            flex: 1;
+            background-color: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 9999px;
+            padding: 0.875rem 1.5rem;
+            color: var(--text-main);
+            font-size: 1rem;
+            font-weight: 500;
+            outline: none;
+            transition: all 0.2s ease;
+            text-transform: uppercase;
+        }
+
+        .search-input:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+
+        .search-input::placeholder {
+            color: var(--text-muted);
+            text-transform: none;
+        }
+
+        .search-button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 9999px;
+            padding: 0 1.5rem;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .search-button:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .search-button:active {
+            transform: scale(0.96);
+        }
+
+        /* ── Loading State ── */
+        .loading-container {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 4rem 1rem;
+            flex: 1;
+            text-align: center;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid var(--surface-color);
+            border-top-color: var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 1.5rem;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .loading-text {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            font-weight: 500;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 0.7;
+            }
+
+            50% {
+                opacity: 1;
+            }
+
+            100% {
+                opacity: 0.7;
+            }
+        }
+
+        /* ── Results Area ── */
+        #results-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+        }
+
+        /* The iframe will house the self-contained HTML report from renderer.py */
+        #report-frame {
+            border: none;
+            width: 100%;
+            height: 3500px;
+            /* Force iframe to be extremely tall so the main page scrolls, not the iframe itself */
+            background: transparent;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        .error {
+            color: var(--error-color);
+            text-align: center;
+            padding: 2rem;
+            background: rgba(239, 68, 68, 0.1);
+            border-radius: 8px;
+            margin: 2rem auto;
+            max-width: 500px;
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        /* Mobile Adjustments */
+        @media (max-width: 600px) {
+            .search-container {
+                padding: 1.5rem 1rem;
+            }
+
+            .logo {
+                font-size: 1.5rem;
+            }
+
+            .search-input {
+                font-size: 16px;
+                /* Prevents iOS zoom */
+                padding: 0.75rem 1.25rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="search-container">
+        <div class="logo">Swing<span>Scope</span></div>
+        <div class="subtitle">Algorithmic Swing Trading Analyzer</div>
+
+        <form id="search-form" class="search-form" autocomplete="off">
+            <input type="text" id="ticker-input" name="ticker" class="search-input"
+                placeholder="Enter Ticker (e.g. AAPL)" required autofocus>
+            <button type="submit" class="search-button">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+            </button>
+        </form>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loading" class="loading-container">
+        <div class="spinner"></div>
+        <div class="loading-text">Analyzing technicals & compiling report...</div>
+    </div>
+
+    <!-- Results (Injected HTML) -->
+    <div id="results-container">
+        <iframe id="report-frame" title="Analysis Report"></iframe>
+    </div>
+
+    <script>
+        const form = document.getElementById('search-form');
+        const input = document.getElementById('ticker-input');
+        const loading = document.getElementById('loading');
+        const frame = document.getElementById('report-frame');
+        const resultsContainer = document.getElementById('results-container');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const ticker = input.value.trim().toUpperCase();
+            if (!ticker) return;
+
+            // Hide old results, show UI loader
+            frame.style.opacity = '0';
+            setTimeout(() => { frame.srcdoc = ''; }, 300); // Clear old content
+
+            // If they are on mobile keyboard, blur the input to hide the keyboard
+            input.blur();
+
+            loading.style.display = 'flex';
+
+            // Randomize loading messages for a premium feel
+            const msgs = [
+                `Fetching ${ticker} market data...`,
+                `Computing volume profile...`,
+                `Detecting patterns for ${ticker}...`,
+                `Scoring setups...`
+            ];
+            const textEl = document.querySelector('.loading-text');
+            let msgIdx = 0;
+            const msgInterval = setInterval(() => {
+                msgIdx = (msgIdx + 1) % msgs.length;
+                textEl.textContent = msgs[msgIdx];
+            }, 1500);
+
+            try {
+                // Submit POST
+                const formData = new FormData();
+                formData.append('ticker', ticker);
+
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                clearInterval(msgInterval);
+                const htmlContent = await response.text();
+
+                // Hide loader
+                loading.style.display = 'none';
+
+                if (response.ok) {
+                    // Inject the returned HTML document into the iframe
+                    frame.srcdoc = htmlContent;
+
+                    // Wait for it to render, then fade it in
+                    setTimeout(() => {
+                        frame.style.opacity = '1';
+                    }, 100);
+                } else {
+                    // Inject error directly
+                    resultsContainer.innerHTML = htmlContent; // htmlContent already contains <div class='error'>
+                }
+
+            } catch (err) {
+                clearInterval(msgInterval);
+                loading.style.display = 'none';
+                resultsContainer.innerHTML = `<div class="error">Network error: Could not reach the server.</div>`;
+            }
+        });
+    </script>
+</body>
+
+</html>

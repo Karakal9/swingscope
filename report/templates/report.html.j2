@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SwingScope — {{ ticker }} | {{ date }}</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #21262d;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text2: #8b949e;
+    --green: #3fb950;
+    --red: #f85149;
+    --blue: #58a6ff;
+    --orange: #d29922;
+    --purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 0;
+  }
+
+  /* ── Header ─────────────────────────────────────────── */
+  .header {
+    background: linear-gradient(135deg, #161b22 0%, #0d1117 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 20px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .ticker-badge {
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: 1px;
+  }
+  .header-meta { color: var(--text2); font-size: 14px; }
+  .setup-badge {
+    display: inline-block;
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-weight: 700;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .score-high { background: rgba(63,185,80,0.2); color: var(--green); border: 1px solid var(--green); }
+  .score-valid { background: rgba(88,166,255,0.2); color: var(--blue); border: 1px solid var(--blue); }
+  .score-marginal { background: rgba(210,153,34,0.2); color: var(--orange); border: 1px solid var(--orange); }
+  .score-weak { background: rgba(139,148,158,0.2); color: var(--text2); border: 1px solid var(--text2); }
+  .score-invalid { background: rgba(248,81,73,0.2); color: var(--red); border: 1px solid var(--red); }
+
+  /* ── Container / Section ────────────────────────────── */
+  .container { max-width: 1400px; margin: 0 auto; padding: 24px 32px; }
+  .section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .section-title {
+    font-size: 15px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text2);
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-body { padding: 20px; }
+
+  /* ── Chart ──────────────────────────────────────────── */
+  #chart { width: 100%; min-height: 600px; }
+
+  /* ── Grid layout for info blocks ────────────────────── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+  @media (max-width: 900px) {
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  }
+
+  /* ── Score bar ──────────────────────────────────────── */
+  .score-bar-wrap {
+    background: var(--surface2);
+    border-radius: 8px;
+    height: 14px;
+    overflow: hidden;
+    position: relative;
+  }
+  .score-bar-fill {
+    height: 100%;
+    border-radius: 8px;
+    transition: width 0.5s ease;
+  }
+
+  /* ── Factor table ───────────────────────────────────── */
+  .factor-table { width: 100%; border-collapse: collapse; }
+  .factor-table th, .factor-table td {
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+  }
+  .factor-table th { color: var(--text2); font-weight: 600; }
+  .factor-table .pts { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .icon-check { color: var(--green); }
+  .icon-warn { color: var(--orange); }
+  .icon-cross { color: var(--red); }
+
+  /* ── Trade params grid ──────────────────────────────── */
+  .param-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 16px;
+  }
+  .param-card {
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 14px;
+    text-align: center;
+  }
+  .param-label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; }
+  .param-value { font-size: 22px; font-weight: 800; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .param-value.green { color: var(--green); }
+  .param-value.red { color: var(--red); }
+  .param-value.blue { color: var(--blue); }
+
+  /* ── Thesis / Risks ─────────────────────────────────── */
+  .thesis { font-size: 15px; line-height: 1.7; color: var(--text); }
+  .risk-list { list-style: none; padding: 0; }
+  .risk-list li {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+    color: var(--text2);
+  }
+  .risk-list li::before { content: "⚠ "; color: var(--orange); }
+
+  /* ── News headlines ─────────────────────────────────── */
+  .headline-list { list-style: none; padding: 0; }
+  .headline-list li {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+  }
+  .headline-list li:last-child { border-bottom: none; }
+  .hl-sentiment {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-right: 8px;
+    text-transform: uppercase;
+  }
+  .hl-bull { background: rgba(63,185,80,0.15); color: var(--green); }
+  .hl-bear { background: rgba(248,81,73,0.15); color: var(--red); }
+  .hl-watch { background: rgba(210,153,34,0.15); color: var(--orange); }
+  .hl-neutral { background: rgba(139,148,158,0.1); color: var(--text2); }
+  .hl-date { color: var(--text2); font-size: 12px; margin-left: 8px; }
+
+  /* ── Earnings ───────────────────────────────────────── */
+  .earnings-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 13px;
+  }
+  .earn-clear { background: rgba(63,185,80,0.15); color: var(--green); }
+  .earn-watch { background: rgba(210,153,34,0.15); color: var(--orange); }
+  .earn-caution { background: rgba(248,81,73,0.15); color: var(--red); }
+  .earn-imminent { background: rgba(248,81,73,0.3); color: var(--red); font-weight: 900; }
+
+  /* ── Footer ─────────────────────────────────────────── */
+  .footer {
+    text-align: center;
+    padding: 20px;
+    color: var(--text2);
+    font-size: 12px;
+    border-top: 1px solid var(--border);
+    margin-top: 32px;
+  }
+
+  /* ── DO NOT ENTER banner ────────────────────────────── */
+  .dne-banner {
+    background: rgba(248,81,73,0.15);
+    border: 2px solid var(--red);
+    border-radius: 8px;
+    padding: 16px 24px;
+    text-align: center;
+    color: var(--red);
+    font-weight: 800;
+    font-size: 18px;
+    margin-bottom: 20px;
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-left">
+    <span class="ticker-badge">{{ ticker }}</span>
+    <div>
+      <div class="header-meta">{{ company_name }} &bull; {{ date }}</div>
+      <div class="header-meta">{{ setup_type }} &bull; {{ direction }}</div>
+    </div>
+  </div>
+  <span class="setup-badge {{ score_class }}">{{ verdict }} — {{ final_score }}/100</span>
+</div>
+
+<div class="container">
+
+  {% if cached_at %}
+  <div style="background: rgba(88,166,255,0.15); border: 1px solid var(--blue); border-radius: 8px; padding: 12px; text-align: center; color: var(--blue); font-weight: 600; font-size: 14px; margin-bottom: 20px;">
+    ℹ️ This is a cached report from {{ cached_at }}. To refresh, run with --no-cache.
+  </div>
+  {% endif %}
+
+  {% if regime and regime.label == "BEAR" %}
+  <div class="dne-banner">🚫 DO NOT ENTER — Market Regime is BEARISH ({{ regime.detail }})</div>
+  {% elif regime and regime.label == "CAUTION" %}
+  <div class="dne-banner" style="background: rgba(210,153,34,0.15); border-color: var(--orange); color: var(--orange);">
+    ⚠ CAUTION REGIME — Sizing reduced to HALF ({{ regime.detail }})
+  </div>
+  {% endif %}
+
+  {% if earnings_imminent %}
+  <div class="dne-banner">🚫 DO NOT ENTER — Earnings in {{ days_to_earnings }} days ({{ next_earnings_date }})</div>
+  {% endif %}
+
+  <!-- CHART -->
+  <div class="section">
+    <div class="section-body">
+      <div id="chart"></div>
+    </div>
+  </div>
+
+  <!-- SETUP SUMMARY -->
+  <div class="section">
+    <div class="section-title">Setup Summary</div>
+    <div class="section-body">
+      <div class="grid-3">
+        <div>
+          <div class="param-label">Setup Type</div>
+          <div style="font-size:18px; font-weight:700; margin-top:4px;">{{ setup_type }}</div>
+        </div>
+        <div>
+          <div class="param-label">Direction</div>
+          <div style="font-size:18px; font-weight:700; margin-top:4px; color:var(--green);">{{ direction }}</div>
+        </div>
+        <div>
+          <div class="param-label">Validity Score</div>
+          <div style="font-size:18px; font-weight:700; margin-top:4px;">{{ final_score }} / 100</div>
+          <div class="score-bar-wrap" style="margin-top:8px;">
+            <div class="score-bar-fill" style="width:{{ final_score }}%; background:{{ score_color }};"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FACTOR BREAKDOWN -->
+  <div class="section">
+    <div class="section-title">Factor Breakdown</div>
+    <div class="section-body">
+      <table class="factor-table">
+        <thead><tr><th></th><th>Factor</th><th>Detail</th><th class="pts">Score</th></tr></thead>
+        <tbody>
+        {% for f in factors %}
+        <tr>
+          <td>{% if f.earned >= f.max_pts * 0.7 %}<span class="icon-check">✓</span>{% elif f.earned >= f.max_pts * 0.3 %}<span class="icon-warn">⚠</span>{% else %}<span class="icon-cross">✗</span>{% endif %}</td>
+          <td>{{ f.name }}</td>
+          <td style="color:var(--text2)">{{ f.detail }}</td>
+          <td class="pts">{{ f.earned }} / {{ f.max_pts }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <!-- SECTOR CONTEXT -->
+    <div class="section">
+      <div class="section-title">Sector Context</div>
+      <div class="section-body">
+        <p><strong>{{ sector }}</strong> ({{ sector_etf }})</p>
+        <p>Trend: {{ "Above" if sector_above_ema50 else "Below" }} EMA50 &bull;
+           RS vs SPY: <strong>{{ sector_rs }}</strong></p>
+        <p>MACD: {{ "Positive ✓" if sector_macd_positive else "Negative ✗" }}</p>
+        {% if not sector_macd_positive and sector_rs > 1.0 %}
+        <p style="margin-top:8px; color:var(--orange); font-size:13px; font-weight:600;">
+          ⚠ Sector RS strong but MACD deteriorating — momentum may be peaking
+        </p>
+        {% endif %}
+        <p style="margin-top:8px;">
+          <span class="setup-badge {% if sector_verdict == 'TAILWIND' %}score-high{% elif sector_verdict == 'HEADWIND' %}score-invalid{% else %}score-weak{% endif %}">
+            {{ sector_verdict }} ({{ "%+d"|format(sector_modifier) }} pts)
+          </span>
+        </p>
+      </div>
+    </div>
+
+    <!-- EARNINGS -->
+    <div class="section">
+      <div class="section-title">Earnings &amp; Event Risk</div>
+      <div class="section-body">
+        {% if next_earnings_date %}
+        <p>Next Earnings: <strong>{{ next_earnings_date }}</strong> ({{ days_to_earnings }} days)</p>
+        {% else %}
+        <p>Next Earnings: <em>Unknown</em></p>
+        {% endif %}
+        <p>Risk Status:
+          <span class="earnings-badge {% if earnings_risk == 'CLEAR' %}earn-clear{% elif earnings_risk == 'WATCH' %}earn-watch{% elif earnings_risk == 'CAUTION' %}earn-caution{% else %}earn-imminent{% endif %}">
+            {{ earnings_risk }}
+          </span>
+        </p>
+        {% if last_eps_surprise is not none %}
+        <p>Last EPS Surprise: <strong>{{ "%.1f"|format(last_eps_surprise) }}%</strong>
+           {% if post_earnings_drift %}<span style="color:var(--orange);">Post-Earnings Drift Signal</span>{% endif %}
+        </p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- NEWS -->
+  <div class="section">
+    <div class="section-title">News &amp; Catalysts
+      <span class="setup-badge {% if news_sentiment == 'BULLISH' %}score-high{% elif news_sentiment == 'BEARISH' %}score-invalid{% else %}score-weak{% endif %}" style="margin-left:12px; font-size:11px;">
+        {{ news_sentiment }} ({{ "%+d"|format(news_modifier) }} pts)
+      </span>
+    </div>
+    <div class="section-body">
+      {% if headlines %}
+      <ul class="headline-list">
+        {% for hl in headlines %}
+        <li>
+          <span class="hl-sentiment {% if hl.sentiment == 'BULLISH' %}hl-bull{% elif hl.sentiment == 'BEARISH' %}hl-bear{% elif hl.sentiment == 'WATCH' %}hl-watch{% else %}hl-neutral{% endif %}">{{ hl.sentiment }}</span>
+          {% if hl.link %}<a href="{{ hl.link }}" target="_blank" style="color:var(--text);text-decoration:none;">{{ hl.title }}</a>{% else %}{{ hl.title }}{% endif %}
+          {% if hl.published %}<span class="hl-date">{{ hl.published }}</span>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p style="color:var(--text2)">No recent headlines available.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- TRADE PARAMETERS -->
+  {% if trade %}
+  <div class="section">
+    <div class="section-title">Trade Parameters</div>
+    <div class="section-body">
+      <div class="param-grid">
+        <div class="param-card">
+          <div class="param-label">Entry</div>
+          <div class="param-value green">${{ "%.2f"|format(trade.entry) }}</div>
+        </div>
+        <div class="param-card">
+          <div class="param-label">Stop Loss</div>
+          <div class="param-value red">${{ "%.2f"|format(trade.stop_loss) }}</div>
+        </div>
+        <div class="param-card">
+          <div class="param-label">TP1</div>
+          <div class="param-value blue">${{ "%.2f"|format(trade.tp1) }} ({{ "%.1f"|format(trade.rr_tp1) }}R)</div>
+        </div>
+        <div class="param-card">
+          <div class="param-label">TP2</div>
+          <div class="param-value blue">${{ "%.2f"|format(trade.tp2) }} (2R)</div>
+        </div>
+        <div class="param-card">
+          <div class="param-label">TP3</div>
+          <div class="param-value blue">${{ "%.2f"|format(trade.tp3) }} (3R)</div>
+        </div>
+        <div class="param-card">
+          <div class="param-label">ATR (14)</div>
+          <div class="param-value">${{ "%.2f"|format(atr) }}</div>
+        </div>
+        <div class="param-card">
+          <div class="param-label">R:R Ratio</div>
+          <div class="param-value {% if trade.rr_tp1 >= 2 %}green{% elif trade.rr_tp1 >= 1.5 %}blue{% else %}red{% endif %}">{{ "%.2f"|format(trade.rr_tp1) }}</div>
+        </div>
+        <div class="param-card">
+          <div class="param-label">Shares</div>
+          <div class="param-value">{{ trade.position_shares }}</div>
+        </div>
+        <div class="param-card">
+          <div class="param-label">Notional</div>
+          <div class="param-value">${{ "{:,.0f}".format(trade.position_notional) }}</div>
+        </div>
+        <div class="param-card">
+          <div class="param-label">Risk %</div>
+          <div class="param-value">{{ "%.2f"|format(trade.risk_pct * 100) }}%</div>
+        </div>
+      </div>
+      {% if not trade.rr_valid %}
+      <div class="dne-banner" style="margin-top:16px; font-size:14px;">
+        ⚠ R:R ratio ({{ "%.2f"|format(trade.rr_tp1) }}) below minimum {{ min_rr }} — SKIP
+      </div>
+      {% endif %}
+      {% if trade.atr_cap_triggered %}
+      <div class="dne-banner" style="margin-top:16px; font-size:14px; background: rgba(210,153,34,0.15); border: 2px solid var(--orange); color: var(--orange);">
+        ⚠ ATR Cap Applied — structural invalidation level is at ${{ "%.2f"|format(trade.sl_structural_level) }}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- THESIS -->
+  <div class="section">
+    <div class="section-title">Trade Thesis</div>
+    <div class="section-body">
+      <p class="thesis">{{ thesis }}</p>
+    </div>
+  </div>
+
+  <!-- INVALIDATION RISKS -->
+  {% if invalidation_risks %}
+  <div class="section">
+    <div class="section-title">Invalidation Risks</div>
+    <div class="section-body">
+      <ul class="risk-list">
+        {% for risk in invalidation_risks %}
+        <li>{{ risk }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+<div class="footer">
+  SwingScope v1.0 &bull; Generated {{ date }} &bull; Rules-based analysis — no LLM inference
+</div>
+
+<!-- Plotly.js (self-contained) -->
+<script src="https://cdn.plot.ly/plotly-3.0.1.min.js"></script>
+<script>
+  var chartData = {{ chart_json | safe }};
+  Plotly.newPlot('chart', chartData.data, chartData.layout, {responsive: true});
+</script>
+</body>
+</html>
