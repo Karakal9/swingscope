@@ -23,6 +23,13 @@ app = FastAPI(title="SwingScope Analyzer")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+from fastapi.responses import PlainTextResponse
+import traceback
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    return PlainTextResponse(str(traceback.format_exc()), status_code=500)
+
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
