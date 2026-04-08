@@ -34,13 +34,13 @@ async def global_exception_handler(request: Request, exc: Exception):
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     """Serve the main landing page with the search bar."""
-    return templates.TemplateResponse("index.html", {"request": request, "initial_ticker": ""})
+    return templates.TemplateResponse(request=request, name="index.html", context={"request": request, "initial_ticker": ""})
 
 
 @app.get("/report/{ticker}", response_class=HTMLResponse)
 async def report_page(request: Request, ticker: str):
     """Serve the main landing page with a pre-filled ticker to analyze instantly."""
-    return templates.TemplateResponse("index.html", {"request": request, "initial_ticker": ticker.upper()})
+    return templates.TemplateResponse(request=request, name="index.html", context={"request": request, "initial_ticker": ticker.upper()})
 
 
 @app.post("/analyze", response_class=HTMLResponse)
