@@ -27,7 +27,7 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     """Serve the main landing page with the search bar."""
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse("index.html", {"request": request, "initial_ticker": ""})
 
 
 @app.get("/report/{ticker}", response_class=HTMLResponse)
