@@ -4,10 +4,10 @@ ta>=0.11.0
 numpy>=1.26.0
 scipy>=1.11.0
 plotly>=5.18.0
-Jinja2>=3.1.0
+Jinja2==3.1.6
 feedparser>=6.0.10
 pyarrow>=14.0.0
 rich>=13.0.0
-fastapi
+fastapi==0.128.8
 uvicorn
 python-multipart
