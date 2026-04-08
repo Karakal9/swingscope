@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SwingScope — {{ ticker }} | {{ date }}</title>
+<title>{{ ticker }} - {{ verdict }}</title>
 <link rel="icon" type="image/png" href="/static/favicon.png">
 <style>
   :root {
@@ -303,10 +303,10 @@
       <div class="section-title">Sector Context</div>
       <div class="section-body">
         <p><strong>{{ sector }}</strong> ({{ sector_etf }})</p>
-        <p>Trend: {{ "Above" if sector_above_ema50 else "Below" }} EMA50 &bull;
-           RS vs SPY: <strong>{{ sector_rs }}</strong></p>
-        <p>MACD: {{ "Positive ✓" if sector_macd_positive else "Negative ✗" }}</p>
-        {% if not sector_macd_positive and sector_rs > 1.0 %}
+        <p>Market Condition: <strong>{{ sector_rs_market_cond }}</strong></p>
+        <p>Relative Strength: <strong>{{ sector_rs_label }} (Alpha: {% if sector_alpha > 0 %}+{% endif %}{{ sector_alpha }}%)</strong></p>
+        <p>Trend: {{ "Above" if sector_above_ema50 else "Below" }} EMA50 &bull; MACD: {{ "Positive ✓" if sector_macd_positive else "Negative ✗" }}</p>
+        {% if not sector_macd_positive and sector_alpha > 0 %}
         <p style="margin-top:8px; color:var(--orange); font-size:13px; font-weight:600;">
           ⚠ Sector RS strong but MACD deteriorating — momentum may be peaking
         </p>

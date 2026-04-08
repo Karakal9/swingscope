@@ -353,7 +353,7 @@ def _check_breakout(df: pd.DataFrame, structure: StructureResult, vp: Optional[V
     # Price near resistance
     if structure.resistance_levels:
         nearest_r = min(structure.resistance_levels, key=lambda x: abs(x.price - float(last["Close"])))
-        dist_pct = abs(float(last["Close"]) - nearest_r.price) / nearest_r.price
+        dist_pct = abs(float(last["Close"]) - nearest_r.price) / nearest_r.price if nearest_r.price != 0 else 0
         if dist_pct > cfg.BREAKOUT_COIL_PCT:
             soft_reasons.append(f"Not coiling near resistance ({dist_pct:.1%} away)")
 

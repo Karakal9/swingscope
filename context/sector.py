@@ -29,7 +29,9 @@ class SectorResult:
     etf: str
     etf_above_ema50: bool = False
     etf_above_ema200: bool = False
-    relative_strength: float = 0.0    # RS = ETF 20d return / SPY 20d return
+    relative_strength: float = 0.0    # RS Alpha (%)
+    rs_market_cond: str = "Unknown"
+    rs_label: str = "Unknown"
     macd_positive: bool = False
     verdict: str = "NEUTRAL"          # TAILWIND, NEUTRAL, HEADWIND
     modifier: int = 0                 # pts to add to setup score
@@ -78,15 +80,32 @@ def analyze_sector(ticker: str) -> SectorResult:
     above_ema50 = etf_close > float(last_etf["EMA_50"]) if pd.notna(last_etf["EMA_50"]) else False
     above_ema200 = etf_close > float(last_etf["EMA_200"]) if pd.notna(last_etf["EMA_200"]) else False
 
-    # Relative Strength: ETF 20-day return / SPY 20-day return
-    rs = 1.0
+    # Relative Strength: ETF 20-day return / SPY 20-day return (Spread)
+    alpha = 0.0
+    etf_ret = 0.0
+    spy_ret = 0.0
+    rs_market_cond = "Unknown"
+    rs_label = "Unknown"
+
     if len(etf_df) >= 20 and len(spy_df) >= 20:
-        etf_ret = (float(etf_df["Close"].iloc[-1]) / float(etf_df["Close"].iloc[-20])) - 1
-        spy_ret = (float(spy_df["Close"].iloc[-1]) / float(spy_df["Close"].iloc[-20])) - 1
-        if spy_ret != 0:
-            rs = etf_ret / spy_ret
-        else:
-            rs = 1.0 if etf_ret >= 0 else 0.5
+        etf_prev = float(etf_df["Close"].iloc[-20])
+        spy_prev = float(spy_df["Close"].iloc[-20])
+        etf_ret = (float(etf_df["Close"].iloc[-1]) / etf_prev) - 1 if etf_prev != 0 else 0
+        spy_ret = (float(spy_df["Close"].iloc[-1]) / spy_prev) - 1 if spy_prev != 0 else 0
+        alpha = etf_ret - spy_ret
+
+        if etf_ret > 0 and spy_ret > 0:
+            rs_market_cond = "Broad Bull Market"
+            rs_label = "Strong (Outperforming)" if alpha > 0 else "Weak (Underperforming)"
+        elif etf_ret < 0 and spy_ret < 0:
+            rs_market_cond = "Broad Bear Market"
+            rs_label = "Strong (Defensive resilience)" if alpha > 0 else "Weak (Underperforming)"
+        elif etf_ret > 0 and spy_ret <= 0:
+            rs_market_cond = "Divergence"
+            rs_label = "Strongest (Gaining despite market drag)"
+        elif etf_ret <= 0 and spy_ret > 0:
+            rs_market_cond = "Divergence"
+            rs_label = "Weakest (Falling despite market lift)"
 
     # MACD momentum
     macd_ind = MACD(close=etf_df["Close"], window_slow=26, window_fast=12, window_sign=9, fillna=False)
@@ -97,10 +116,10 @@ def analyze_sector(ticker: str) -> SectorResult:
         macd_positive = hist > 0
 
     # Verdict
-    if rs > 1.0 and above_ema50:
+    if alpha > 0 and above_ema50:
         verdict = "TAILWIND"
         modifier = cfg.MOD_SECTOR_TAILWIND
-    elif rs < 0.7 or not above_ema50:
+    elif alpha <= 0 or not above_ema50:
         verdict = "HEADWIND"
         modifier = cfg.MOD_SECTOR_HEADWIND
     else:
@@ -112,13 +131,15 @@ def analyze_sector(ticker: str) -> SectorResult:
         etf=etf_symbol,
         etf_above_ema50=above_ema50,
         etf_above_ema200=above_ema200,
-        relative_strength=round(rs, 3),
+        relative_strength=round(alpha * 100, 2),
+        rs_market_cond=rs_market_cond,
+        rs_label=rs_label,
         macd_positive=macd_positive,
         verdict=verdict,
         modifier=modifier,
     )
     logger.info(
-        "Sector: %s (ETF=%s)  RS=%.3f  EMA50=%s  Verdict=%s  Mod=%+d",
-        sector, etf_symbol, rs, above_ema50, verdict, modifier,
+        "Sector: %s (ETF=%s)  Alpha=%.2f%%  EMA50=%s  Verdict=%s  Mod=%+d",
+        sector, etf_symbol, alpha*100, above_ema50, verdict, modifier,
     )
     return result

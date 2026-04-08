@@ -251,12 +251,18 @@
         const loading = document.getElementById('loading');
         const frame = document.getElementById('report-frame');
         const resultsContainer = document.getElementById('results-container');
+        const initialTicker = "{{ initial_ticker | default('') }}";
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
 
             const ticker = input.value.trim().toUpperCase();
             if (!ticker) return;
+
+            // Update browser URL silently without reloading
+            if (window.location.pathname !== '/report/' + ticker) {
+                window.history.pushState(null, '', '/report/' + ticker);
+            }
 
             // Hide old results, show UI loader
             frame.style.opacity = '0';
@@ -301,6 +307,12 @@
                     // Inject the returned HTML document into the iframe
                     frame.srcdoc = htmlContent;
 
+                    // Automatically update main tab title with the iframe's title
+                    const titleMatch = htmlContent.match(/<title>(.*?)<\/title>/i);
+                    if (titleMatch && titleMatch[1]) {
+                        document.title = titleMatch[1];
+                    }
+
                     // Wait for it to render, then fade it in
                     setTimeout(() => {
                         frame.style.opacity = '1';
@@ -316,6 +328,12 @@
                 resultsContainer.innerHTML = `<div class="error">Network error: Could not reach the server.</div>`;
             }
         });
+
+        // If the URL included a ticker (e.g. /report/AAPL), immediately trigger the analysis
+        if (initialTicker) {
+            input.value = initialTicker;
+            form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+        }
     </script>
 </body>
 

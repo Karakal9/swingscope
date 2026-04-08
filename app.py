@@ -30,6 +30,12 @@ async def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 
+@app.get("/report/{ticker}", response_class=HTMLResponse)
+async def report_page(request: Request, ticker: str):
+    """Serve the main landing page with a pre-filled ticker to analyze instantly."""
+    return templates.TemplateResponse("index.html", {"request": request, "initial_ticker": ticker.upper()})
+
+
 @app.post("/analyze", response_class=HTMLResponse)
 async def analyze_api(request: Request, ticker: str = Form(...)):
     """Accept the ticker, run the pipeline, and return the generated HTML report."""
