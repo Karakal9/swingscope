@@ -44,7 +44,6 @@ def analyze_ticker(
     output_dir: Optional[Path] = None,
     regime=None,
     force_refresh: bool = False,
-    invpro_health: int = 3,
 ) -> Optional[dict]:
     """Run the full analysis pipeline for a single ticker.
 
@@ -119,9 +118,32 @@ def analyze_ticker(
     # yfinance returns debtToEquity usually as a percentage
     debt_to_equity = raw_de / 100.0 if raw_de > 10.0 else raw_de
 
+    # Extract swing-trading fundamentals
+    short_interest = info.get("shortPercentOfFloat", 0.0) or 0.0
+    float_shares = info.get("floatShares", 0) or 0
+    current_ratio = info.get("currentRatio", 0.0) or 0.0
+    earnings_growth = info.get("earningsGrowth", 0.0) or 0.0
+
     # ── Step 2: Indicators ───────────────────────────────────
     console.print("[dim]Computing indicators…[/dim]")
     df = add_indicators(df)
+
+    # ── Price Momentum Grade (ADX + ROC) ─────────────────────
+    adx_val = float(df["ADX_14"].iloc[-1]) if "ADX_14" in df.columns and not df["ADX_14"].isna().iloc[-1] else 0.0
+    roc_val = float(df["ROC_20"].iloc[-1]) if "ROC_20" in df.columns and not df["ROC_20"].isna().iloc[-1] else 0.0
+
+    if roc_val < 0 and adx_val > 25:
+        price_momentum_grade = 1  # Strong downtrend
+    elif roc_val < 0:
+        price_momentum_grade = 2  # Weak / declining
+    elif roc_val > 0 and adx_val < 20:
+        price_momentum_grade = 3  # Positive but weak trend
+    elif roc_val > 5 and adx_val > 20:
+        price_momentum_grade = 4  # Strong momentum
+    elif roc_val > 10 and adx_val > 25:
+        price_momentum_grade = 5  # Excellent momentum
+    else:
+        price_momentum_grade = 3  # Default neutral
 
     # ── Step 3: Volume Profile ───────────────────────────────
     console.print("[dim]Building volume profile…[/dim]")
@@ -184,7 +206,7 @@ def analyze_ticker(
         context_modifier=context_modifier,
         weekly_trend=weekly_trend,
         debt_to_equity=debt_to_equity,
-        invpro_health=invpro_health,
+        price_momentum_grade=price_momentum_grade,
         sector_rs_direction=sector.rs_direction,
     )
     top_setup = setups[0]
@@ -234,6 +256,14 @@ def analyze_ticker(
         patterns=patterns,
         regime=regime,
         output_dir=output_dir,
+        debt_to_equity=debt_to_equity,
+        price_momentum_grade=price_momentum_grade,
+        adx_val=adx_val,
+        roc_val=roc_val,
+        short_interest=short_interest,
+        float_shares=float_shares,
+        current_ratio=current_ratio,
+        earnings_growth=earnings_growth,
     )
 
     console.print(f"[green]✓ Report: {report_path}[/green]")
@@ -253,13 +283,17 @@ def analyze_ticker(
         "discrete_fields": {
             "pattern_type": top_setup.setup_type.value,
             "pattern_score": top_setup.final_score,
-            "invpro_health": invpro_health,
+            "price_momentum_grade": price_momentum_grade,
             "vcp_valid": "Yes" if is_vcp else "No",
             "weekly_alignment": weekly_trend.name if weekly_trend else "Unknown",
             "rsi_at_entry": top_setup.rsi,
             "atr_at_entry": round(atr, 2),
             "debt_equity": round(debt_to_equity, 2),
             "sector_rs": sector.rs_direction,
+            "short_interest": round(short_interest * 100, 2),
+            "float_shares": float_shares,
+            "current_ratio": round(current_ratio, 2),
+            "earnings_growth": round(earnings_growth * 100, 2),
         }
     }
 
@@ -286,13 +320,6 @@ def main() -> None:
         "--no-cache",
         action="store_true",
         help="Force fresh data fetch (ignore cache)",
-    )
-    parser.add_argument(
-        "--invpro",
-        type=int,
-        default=3,
-        choices=[1, 2, 3, 4, 5],
-        help="InvestorPro health grade (1=Very Weak, 5=Excellent, default 3)",
     )
     args = parser.parse_args()
 
@@ -327,7 +354,6 @@ def main() -> None:
                 output_dir, 
                 regime=regime, 
                 force_refresh=args.no_cache,
-                invpro_health=args.invpro,
             )
             if result:
                 results.append(result)

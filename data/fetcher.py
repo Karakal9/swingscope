@@ -190,10 +190,21 @@ def get_ticker_info(ticker: str) -> dict:
             "industry": info.get("industry", "Unknown"),
             "name": info.get("shortName", ticker),
             "debtToEquity": info.get("debtToEquity", 0.0),
+            # Swing-trading fundamentals
+            "shortPercentOfFloat": info.get("shortPercentOfFloat", 0.0),
+            "floatShares": info.get("floatShares", 0),
+            "currentRatio": info.get("currentRatio", 0.0),
+            "earningsGrowth": info.get("earningsGrowth", 0.0),
+            "revenueGrowth": info.get("revenueGrowth", 0.0),
         }
     except Exception as exc:
         logger.warning("%s: failed to get ticker info — %s", ticker, exc)
-        return {"sector": "Unknown", "industry": "Unknown", "name": ticker, "debtToEquity": 0.0}
+        return {
+            "sector": "Unknown", "industry": "Unknown", "name": ticker,
+            "debtToEquity": 0.0, "shortPercentOfFloat": 0.0,
+            "floatShares": 0, "currentRatio": 0.0,
+            "earningsGrowth": 0.0, "revenueGrowth": 0.0,
+        }
 
 
 def get_earnings(ticker: str) -> dict:

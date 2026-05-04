@@ -185,6 +185,14 @@ def render_report(
     regime=None,
     cached_at=None,
     output_dir: Optional[Path] = None,
+    debt_to_equity: float = 0.0,
+    price_momentum_grade: int = 3,
+    adx_val: float = 0.0,
+    roc_val: float = 0.0,
+    short_interest: float = 0.0,
+    float_shares: int = 0,
+    current_ratio: float = 0.0,
+    earnings_growth: float = 0.0,
 ) -> Path:
     """Render the complete HTML report and write to disk.
 
@@ -283,6 +291,14 @@ def render_report(
         # Thesis / Risks
         thesis=thesis,
         invalidation_risks=invalidation_risks,
+        debt_to_equity=debt_to_equity,
+        price_momentum_grade=price_momentum_grade,
+        adx_val=adx_val,
+        roc_val=roc_val,
+        short_interest=short_interest,
+        float_shares=float_shares,
+        current_ratio=current_ratio,
+        earnings_growth=earnings_growth,
     )
 
     # Render

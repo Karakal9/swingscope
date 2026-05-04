@@ -297,7 +297,7 @@
     </div>
   </div>
 
-  <div class="grid-2">
+  <div class="grid-3">
     <!-- SECTOR CONTEXT -->
     <div class="section">
       <div class="section-title">Sector Context</div>
@@ -338,6 +338,45 @@
            {% if post_earnings_drift %}<span style="color:var(--orange);">Post-Earnings Drift Signal</span>{% endif %}
         </p>
         {% endif %}
+      </div>
+    </div>
+
+    <!-- FUNDAMENTAL HEALTH -->
+    <div class="section">
+      <div class="section-title">Swing Fundamentals</div>
+      <div class="section-body">
+        <div class="param-grid" style="grid-template-columns: repeat(3, 1fr);">
+          <div class="param-card">
+            <div class="param-label">Price Momentum</div>
+            <div class="param-value {% if price_momentum_grade >= 4 %}green{% elif price_momentum_grade <= 2 %}red{% else %}blue{% endif %}">{{ price_momentum_grade }} / 5</div>
+            <div style="font-size:11px; color:var(--text2); margin-top:4px;">ADX={{ "%.1f"|format(adx_val) }} · ROC={{ "%.1f"|format(roc_val) }}%</div>
+          </div>
+          <div class="param-card">
+            <div class="param-label">Short Interest</div>
+            <div class="param-value {% if short_interest > 0.10 %}green{% elif short_interest > 0.05 %}blue{% endif %}">{{ "%.1f"|format(short_interest * 100) }}%</div>
+            {% if short_interest > 0.10 %}<div style="font-size:11px; color:var(--green); margin-top:4px;">🔥 Squeeze Potential</div>{% endif %}
+          </div>
+          <div class="param-card">
+            <div class="param-label">Float</div>
+            <div class="param-value">{% if float_shares > 1000000000 %}{{ "%.1f"|format(float_shares / 1000000000) }}B{% elif float_shares > 1000000 %}{{ "%.0f"|format(float_shares / 1000000) }}M{% else %}{{ float_shares }}{% endif %}</div>
+            {% if float_shares > 0 and float_shares < 50000000 %}<div style="font-size:11px; color:var(--orange); margin-top:4px;">Low Float — Higher Volatility</div>{% endif %}
+          </div>
+          <div class="param-card">
+            <div class="param-label">D/E Ratio</div>
+            <div class="param-value {% if debt_to_equity > 2.0 %}red{% elif debt_to_equity > 1.0 %}red{% else %}green{% endif %}">{{ "%.2f"|format(debt_to_equity) }}</div>
+            {% if debt_to_equity > 2.0 %}<div style="font-size:11px; color:var(--red); margin-top:4px;">⚠ Structural Risk</div>
+            {% elif debt_to_equity > 1.0 %}<div style="font-size:11px; color:var(--orange); margin-top:4px;">⚠ Elevated</div>{% endif %}
+          </div>
+          <div class="param-card">
+            <div class="param-label">Current Ratio</div>
+            <div class="param-value {% if current_ratio < 1.0 %}red{% elif current_ratio >= 1.5 %}green{% else %}blue{% endif %}">{{ "%.2f"|format(current_ratio) }}</div>
+            {% if current_ratio < 1.0 %}<div style="font-size:11px; color:var(--red); margin-top:4px;">⚠ Dilution Risk</div>{% endif %}
+          </div>
+          <div class="param-card">
+            <div class="param-label">Earnings Growth</div>
+            <div class="param-value {% if earnings_growth > 0 %}green{% elif earnings_growth < 0 %}red{% endif %}">{{ "%+.1f"|format(earnings_growth * 100) }}%</div>
+          </div>
+        </div>
       </div>
     </div>
   </div>

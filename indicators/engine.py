@@ -14,8 +14,8 @@ import logging
 import numpy as np
 import pandas as pd
 import ta as ta_lib
-from ta.trend import EMAIndicator, MACD
-from ta.momentum import RSIIndicator, StochasticOscillator
+from ta.trend import EMAIndicator, MACD, ADXIndicator
+from ta.momentum import RSIIndicator, StochasticOscillator, ROCIndicator
 from ta.volatility import AverageTrueRange, BollingerBands
 from ta.volume import OnBalanceVolumeIndicator
 
@@ -91,6 +91,14 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     vol_sma = volume.rolling(window=20).mean()
     df["VOL_SMA_20"] = vol_sma
     df["RVOL"] = volume / vol_sma.replace(0, float("nan"))
+
+    # ── Trend Strength: ADX (14) ─────────────────────────────
+    adx = ADXIndicator(high=high, low=low, close=close, window=14, fillna=False)
+    df["ADX_14"] = adx.adx()
+
+    # ── Momentum: Rate of Change (20-day) ────────────────────
+    roc = ROCIndicator(close=close, window=20, fillna=False)
+    df["ROC_20"] = roc.roc()
 
     logger.info("Indicators added: %d columns total", len(df.columns))
     return df

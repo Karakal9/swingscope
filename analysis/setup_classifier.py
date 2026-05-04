@@ -609,7 +609,7 @@ def classify_setups(
     context_modifier: int = 0,
     weekly_trend: Optional[Trend] = None,
     debt_to_equity: float = 0.0,
-    invpro_health: int = 3,
+    price_momentum_grade: int = 3,
     sector_rs_direction: str = "Neutral",
 ) -> list[SetupResult]:
     """Evaluate all 5 setups and return ranked results.
@@ -663,12 +663,12 @@ def classify_setups(
     elif debt_to_equity > 1.0:
         context_modifier -= 8
         
-    # InvestorPro Health Gate
-    if invpro_health == 5:
+    # Price Momentum Grade Gate
+    if price_momentum_grade == 5:
         context_modifier += 5
-    elif invpro_health == 4:
+    elif price_momentum_grade == 4:
         context_modifier += 3
-    elif invpro_health == 2:
+    elif price_momentum_grade == 2:
         context_modifier -= 5
 
     # OBV divergence (computed in scorer, but we flag it here too)
@@ -747,10 +747,10 @@ def classify_setups(
         # Fundamental Warnings & Setup-specific Gates
         if debt_to_equity > 1.0:
             warnings.append(f"HIGH LEVERAGE (D/E={debt_to_equity:.2f}) — elevated structural risk")
-        if invpro_health == 2:
-            warnings.append("InvestorPro Health Weak")
-        if invpro_health == 1 and setup_type in (SetupType.FIB_PULLBACK, SetupType.BULL_FLAG, SetupType.EMA_PULLBACK):
-            hard_reasons.append("InvestorPro Health Very Weak — Trend Setup Rejected")
+        if price_momentum_grade == 2:
+            warnings.append("Weak Price Momentum (Grade 2/5)")
+        if price_momentum_grade == 1 and setup_type in (SetupType.FIB_PULLBACK, SetupType.BULL_FLAG, SetupType.EMA_PULLBACK):
+            hard_reasons.append("Price Momentum Grade 1 — Strong downtrend, Trend Setup Rejected")
             final = 0
             hard_inv = True
 
