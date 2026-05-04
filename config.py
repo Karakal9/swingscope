@@ -165,6 +165,11 @@ NEWS_BEARISH_KEYWORDS: Final[list[str]] = [
     "miss", "lowered guidance", "downgraded", "investigation",
     "lawsuit", "recall", "layoffs", "disappointing",
     "guidance cut", "sec probe",
+    # Swing-trading structural risk triggers
+    "insider selling", "insider sold", "fuel costs", "margin pressure",
+    "crude oil", "dilution", "secondary offering", "shelf registration",
+    "debt default", "credit downgrade", "short seller", "bankruptcy",
+    "going concern", "delisted",
 ]
 
 NEWS_WATCH_KEYWORDS: Final[list[str]] = [

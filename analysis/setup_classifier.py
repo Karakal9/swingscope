@@ -583,6 +583,80 @@ def _check_fib_pullback(
 
 
 # ──────────────────────────────────────────────────────────────
+# Guardrail helpers
+# ──────────────────────────────────────────────────────────────
+def check_weekly_distribution_wicks(
+    weekly_df: Optional[pd.DataFrame],
+    lookback: int = 8,
+    wick_ratio_threshold: float = 0.60,
+    min_occurrences: int = 2,
+) -> tuple[bool, int]:
+    """Detect heavy upper wicks on the weekly chart (institutional distribution).
+
+    Returns (is_distribution, count_of_heavy_wick_bars).
+    A wick is "heavy" when the upper wick is >= wick_ratio_threshold of the
+    total candle range (High - Low).
+    """
+    if weekly_df is None or len(weekly_df) < lookback:
+        return False, 0
+
+    recent = weekly_df.iloc[-lookback:]
+    count = 0
+    for _, bar in recent.iterrows():
+        rng = float(bar["High"]) - float(bar["Low"])
+        if rng <= 0:
+            continue
+        upper_wick = float(bar["High"]) - max(float(bar["Open"]), float(bar["Close"]))
+        if upper_wick / rng >= wick_ratio_threshold:
+            count += 1
+
+    return count >= min_occurrences, count
+
+
+def check_ema_whipsaw(
+    df: pd.DataFrame,
+    lookback: int = 15,
+    threshold: int = 5,
+) -> tuple[bool, int]:
+    """Count how many times price crossed EMA_21 in the last *lookback* bars.
+
+    Returns (is_chaotic, cross_count).  Chaotic if cross_count >= threshold.
+    """
+    if "EMA_21" not in df.columns or len(df) < lookback + 1:
+        return False, 0
+
+    recent = df.iloc[-(lookback + 1):]
+    crosses = 0
+    for i in range(1, len(recent)):
+        prev_close = float(recent["Close"].iloc[i - 1])
+        curr_close = float(recent["Close"].iloc[i])
+        prev_ema = float(recent["EMA_21"].iloc[i - 1])
+        curr_ema = float(recent["EMA_21"].iloc[i])
+        # A cross occurs when the close changes side relative to EMA
+        if (prev_close >= prev_ema and curr_close < curr_ema) or \
+           (prev_close < prev_ema and curr_close >= curr_ema):
+            crosses += 1
+
+    return crosses >= threshold, crosses
+
+
+def check_rsi_slope(
+    df: pd.DataFrame,
+    lookback: int = 5,
+) -> tuple[bool, float]:
+    """Check if RSI is rising over the last *lookback* bars.
+
+    Returns (is_rising, slope).  Slope > 0 means momentum is returning.
+    """
+    if "RSI_14" not in df.columns or len(df) < lookback:
+        return True, 0.0  # Default to True if no data
+
+    rsi_data = df["RSI_14"].iloc[-lookback:].values
+    slope = float(np.polyfit(range(lookback), rsi_data, 1)[0])
+    return slope > 0, slope
+
+
+# ──────────────────────────────────────────────────────────────
 # Verdict mapper
 # ──────────────────────────────────────────────────────────────
 def _map_verdict(score: int) -> Verdict:
@@ -608,6 +682,7 @@ def classify_setups(
     fib: Optional[FibResult],
     context_modifier: int = 0,
     weekly_trend: Optional[Trend] = None,
+    weekly_df: Optional[pd.DataFrame] = None,
     debt_to_equity: float = 0.0,
     price_momentum_grade: int = 3,
     sector_rs_direction: str = "Neutral",
@@ -677,6 +752,26 @@ def classify_setups(
         price_slope = np.polyfit(range(20), df["Close"].iloc[-20:].values, 1)[0]
         if price_slope > 0 and obv_slope < 0:
             hard_gates.append("OBV bearish divergence detected")
+
+    # ── Guardrail: Weekly Distribution Wicks ──────────────────
+    is_distribution, wick_count = check_weekly_distribution_wicks(weekly_df)
+    if is_distribution:
+        context_modifier -= 15
+        logger.info("GUARDRAIL: Weekly distribution wicks detected (%d bars) → -15 pts", wick_count)
+
+    # ── Guardrail: EMA Whipsaw Detector ───────────────────────
+    is_chaotic, cross_count = check_ema_whipsaw(df)
+    if is_chaotic:
+        context_modifier -= 10
+        logger.info("GUARDRAIL: EMA whipsaw detected (%d crosses in 15 bars) → -10 pts", cross_count)
+
+    # ── Guardrail: RSI Slope Gate ─────────────────────────────
+    rsi_val_current = float(last.get("RSI_14", 50.0))
+    rsi_rising, rsi_slope = check_rsi_slope(df)
+    if not rsi_rising and 40 <= rsi_val_current <= 58:
+        # RSI is in the "ideal reset" zone but momentum is still falling
+        context_modifier -= 5
+        logger.info("GUARDRAIL: RSI in reset zone but slope negative (%.2f) → -5 pts", rsi_slope)
 
     # ── Deterministic Thesis Variables ────────────────────────
     rsi_val = float(last.get("RSI_14", 50.0))
@@ -753,6 +848,14 @@ def classify_setups(
             hard_reasons.append("Price Momentum Grade 1 — Strong downtrend, Trend Setup Rejected")
             final = 0
             hard_inv = True
+
+        # Guardrail warnings (for report visibility)
+        if is_distribution:
+            warnings.append(f"WEEKLY DISTRIBUTION: {wick_count} heavy upper-wick bars — overhead supply")
+        if is_chaotic:
+            warnings.append(f"CHAOTIC ACTION: Price crossed EMA21 {cross_count}x in 15 bars — no clean trend")
+        if not rsi_rising and 40 <= rsi_val_current <= 58:
+            warnings.append(f"RSI FALLING IN RESET ZONE (slope={rsi_slope:.2f}) — momentum not returning")
 
         # Cap breakout on low RVol
         if setup_type == SetupType.BREAKOUT:

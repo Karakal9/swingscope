@@ -205,6 +205,7 @@ def analyze_ticker(
         df, structure, patterns, vp, fib,
         context_modifier=context_modifier,
         weekly_trend=weekly_trend,
+        weekly_df=weekly_df,
         debt_to_equity=debt_to_equity,
         price_momentum_grade=price_momentum_grade,
         sector_rs_direction=sector.rs_direction,
