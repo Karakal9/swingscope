@@ -198,17 +198,47 @@
     margin-top: 32px;
   }
 
-  /* ── DO NOT ENTER banner ────────────────────────────── */
-  .dne-banner {
-    background: rgba(248,81,73,0.15);
-    border: 2px solid var(--red);
+  /* ── Vertical tactical table ─────────────────────────── */
+  .tactical-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    background: var(--surface2);
     border-radius: 8px;
-    padding: 16px 24px;
-    text-align: center;
-    color: var(--red);
-    font-weight: 800;
-    font-size: 18px;
-    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .tactical-table th, .tactical-table td {
+    padding: 12px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .tactical-table th {
+    width: 35%;
+    color: var(--text2);
+    font-weight: 600;
+    background: rgba(255,255,255,0.02);
+  }
+  .tactical-table .logic-col { color: var(--text2); font-style: italic; }
+
+  /* ── SwingAlert Guide ────────────────────────────────── */
+  .guide-box {
+    background: rgba(88,166,255,0.1);
+    border: 1px dashed var(--blue);
+    border-radius: 8px;
+    padding: 16px;
+    margin-top: 10px;
+  }
+  .code-block {
+    background: #000;
+    color: var(--green);
+    padding: 10px;
+    border-radius: 4px;
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 12px;
+    margin: 8px 0;
+    white-space: pre-wrap;
+    word-break: break-all;
   }
 </style>
 </head>
@@ -253,26 +283,75 @@
     </div>
   </div>
 
-  <!-- SETUP SUMMARY -->
+  <!-- ANALYSIS SUMMARY -->
   <div class="section">
-    <div class="section-title">Setup Summary</div>
+    <div class="section-title">1. Analysis Summary</div>
     <div class="section-body">
-      <div class="grid-3">
-        <div>
-          <div class="param-label">Setup Type</div>
-          <div style="font-size:18px; font-weight:700; margin-top:4px;">{{ setup_type }}</div>
+      <p class="thesis" style="margin-bottom:16px;">{{ thesis }}</p>
+      <ul style="list-style: none; padding: 0;">
+        {% for bullet in summary_bullets %}
+        <li style="padding: 4px 0; font-size: 14px; color: var(--text2);">
+          <span style="color: var(--blue); margin-right: 8px;">•</span> {{ bullet }}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  <!-- VERDICT -->
+  <div class="section">
+    <div class="section-title">2. Verdict</div>
+    <div class="section-body">
+      <div style="display: flex; align-items: center; gap: 20px;">
+        <span class="setup-badge {{ score_class }}" style="font-size: 18px; padding: 10px 24px;">{{ verdict }}</span>
+        <p style="font-size: 15px;">{{ final_score }}/100 — Setup is <strong>{{ verdict }}</strong> based on trend alignment, sector tailwinds, and VCP validity.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <!-- TACTICAL DATA ROW -->
+    <div class="section">
+      <div class="section-title">3. Tactical Data Row</div>
+      <div class="section-body">
+        {% if trade %}
+        <table class="tactical-table">
+          <tr><th>Setup Type</th><td>{{ setup_type }}</td><td class="logic-col">Primary structural pattern</td></tr>
+          <tr><th>Entry $</th><td class="green">${{ "%.2f"|format(trade.entry) }}</td><td class="logic-col">Trigger breakout/pullback price</td></tr>
+          <tr><th>Stop $</th><td class="red">${{ "%.2f"|format(trade.stop_loss) }}</td><td class="logic-col">2x ATR + Liquidity Buffer applied</td></tr>
+          <tr><th>Target $</th><td class="blue">${{ "%.2f"|format(trade.tp1) }}</td><td class="logic-col">Nearest major HVN / S/R level</td></tr>
+          <tr><th>Disaster Line</th><td class="red">${{ "%.2f"|format(trade.disaster_line) }}</td><td class="logic-col">Hard exit if thesis fails</td></tr>
+          <tr><th>Zone Floor</th><td>${{ "%.2f"|format(trade.zone_floor) }}</td><td class="logic-col">Bottom of the MA pocket</td></tr>
+          <tr><th>Zone Ceiling</th><td>${{ "%.2f"|format(trade.zone_ceiling) }}</td><td class="logic-col">Top of the MA pocket</td></tr>
+          <tr><th>Min Days</th><td>{{ trade.min_days }}</td><td class="logic-col">Cool-off period before execution</td></tr>
+          <tr><th>Trigger MA</th><td>{{ trade.trigger_ma }}</td><td class="logic-col">Anchoring moving average</td></tr>
+          <tr><th>Proximity ($)</th><td>${{ "%.2f"|format(trade.proximity) }}</td><td class="logic-col">Distance to arm the script</td></tr>
+        </table>
+        {% else %}
+        <p style="color:var(--text2)">No trade parameters available (Setup REJECTED or WEAK).</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- SWINGALERT GUIDE -->
+    <div class="section">
+      <div class="section-title">4. SwingAlert Manual Setup Guide</div>
+      <div class="section-body">
+        {% if swingalert_guide %}
+        <div class="guide-box">
+          <p style="font-size: 14px; margin-bottom: 12px;"><strong>Rule to Select</strong>: <span style="color: var(--blue);">{{ swingalert_guide.rule }}</span></p>
+          <p style="font-size: 13px; color: var(--text2);">Parameters to Enter:</p>
+          <ul style="list-style: none; padding: 4px 0 12px 0; font-size: 13px;">
+            {% for k, v in swingalert_guide.params.items() %}
+            <li><strong>{{ k }}</strong>: {{ v }}</li>
+            {% endfor %}
+          </ul>
+          <p style="font-size: 13px; color: var(--text2);">Alert Context Message:</p>
+          <div class="code-block">{{ swingalert_guide.context }}</div>
         </div>
-        <div>
-          <div class="param-label">Direction</div>
-          <div style="font-size:18px; font-weight:700; margin-top:4px; color:var(--green);">{{ direction }}</div>
-        </div>
-        <div>
-          <div class="param-label">Validity Score</div>
-          <div style="font-size:18px; font-weight:700; margin-top:4px;">{{ final_score }} / 100</div>
-          <div class="score-bar-wrap" style="margin-top:8px;">
-            <div class="score-bar-fill" style="width:{{ final_score }}%; background:{{ score_color }};"></div>
-          </div>
-        </div>
+        {% else %}
+        <p style="color:var(--text2)">Manual guide not available for this setup tier.</p>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -345,7 +424,7 @@
     <div class="section">
       <div class="section-title">Swing Fundamentals</div>
       <div class="section-body">
-        <div class="param-grid" style="grid-template-columns: repeat(3, 1fr);">
+        <div class="param-grid" style="grid-template-columns: repeat(2, 1fr);">
           <div class="param-card">
             <div class="param-label">Price Momentum</div>
             <div class="param-value {% if price_momentum_grade >= 4 %}green{% elif price_momentum_grade <= 2 %}red{% else %}blue{% endif %}">{{ price_momentum_grade }} / 5</div>
@@ -364,8 +443,8 @@
           <div class="param-card">
             <div class="param-label">D/E Ratio</div>
             <div class="param-value {% if debt_to_equity > 2.0 %}red{% elif debt_to_equity > 1.0 %}red{% else %}green{% endif %}">{{ "%.2f"|format(debt_to_equity) }}</div>
-            {% if debt_to_equity > 2.0 %}<div style="font-size:11px; color:var(--red); margin-top:4px;">⚠ Structural Risk</div>
-            {% elif debt_to_equity > 1.0 %}<div style="font-size:11px; color:var(--orange); margin-top:4px;">⚠ Elevated</div>{% endif %}
+            {% if debt_to_equity > 2.0 %}<div style="font-size:11px; color:var(--red); margin-top:4px;">⚠ Structural Risk</div>{% endif %}
+            {% if debt_to_equity > 1.0 and debt_to_equity <= 2.0 %}<div style="font-size:11px; color:var(--orange); margin-top:4px;">⚠ Elevated</div>{% endif %}
           </div>
           <div class="param-card">
             <div class="param-label">Current Ratio</div>
@@ -405,40 +484,12 @@
     </div>
   </div>
 
-  <!-- TRADE PARAMETERS -->
+  <!-- POSITION SIZING -->
   {% if trade %}
   <div class="section">
-    <div class="section-title">Trade Parameters</div>
+    <div class="section-title">Position Sizing &amp; Risk</div>
     <div class="section-body">
       <div class="param-grid">
-        <div class="param-card">
-          <div class="param-label">Entry</div>
-          <div class="param-value green">${{ "%.2f"|format(trade.entry) }}</div>
-        </div>
-        <div class="param-card">
-          <div class="param-label">Stop Loss</div>
-          <div class="param-value red">${{ "%.2f"|format(trade.stop_loss) }}</div>
-        </div>
-        <div class="param-card">
-          <div class="param-label">TP1</div>
-          <div class="param-value blue">${{ "%.2f"|format(trade.tp1) }} ({{ "%.1f"|format(trade.rr_tp1) }}R)</div>
-        </div>
-        <div class="param-card">
-          <div class="param-label">TP2</div>
-          <div class="param-value blue">${{ "%.2f"|format(trade.tp2) }} (2R)</div>
-        </div>
-        <div class="param-card">
-          <div class="param-label">TP3</div>
-          <div class="param-value blue">${{ "%.2f"|format(trade.tp3) }} (3R)</div>
-        </div>
-        <div class="param-card">
-          <div class="param-label">ATR (14)</div>
-          <div class="param-value">${{ "%.2f"|format(atr) }}</div>
-        </div>
-        <div class="param-card">
-          <div class="param-label">R:R Ratio</div>
-          <div class="param-value {% if trade.rr_tp1 >= 2 %}green{% elif trade.rr_tp1 >= 1.5 %}blue{% else %}red{% endif %}">{{ "%.2f"|format(trade.rr_tp1) }}</div>
-        </div>
         <div class="param-card">
           <div class="param-label">Shares</div>
           <div class="param-value">{{ trade.position_shares }}</div>
@@ -448,31 +499,33 @@
           <div class="param-value">${{ "{:,.0f}".format(trade.position_notional) }}</div>
         </div>
         <div class="param-card">
-          <div class="param-label">Risk %</div>
+          <div class="param-label">Account Risk</div>
           <div class="param-value">{{ "%.2f"|format(trade.risk_pct * 100) }}%</div>
         </div>
+        <div class="param-card">
+          <div class="param-label">R:R TP1</div>
+          <div class="param-value {% if trade.rr_tp1 >= 2 %}green{% elif trade.rr_tp1 >= 1.5 %}blue{% else %}red{% endif %}">{{ "%.2f"|format(trade.rr_tp1) }}</div>
+        </div>
+        <div class="param-card">
+          <div class="param-label">ATR (14)</div>
+          <div class="param-value">${{ "%.2f"|format(atr) }}</div>
+        </div>
       </div>
+      
       {% if not trade.rr_valid %}
-      <div class="dne-banner" style="margin-top:16px; font-size:14px;">
+      <div class="dne-banner" style="margin-top:16px; font-size:14px; background: rgba(248,81,73,0.15); border: 2px solid var(--red); color: var(--red); padding: 12px; text-align: center; border-radius: 8px;">
         ⚠ R:R ratio ({{ "%.2f"|format(trade.rr_tp1) }}) below minimum {{ min_rr }} — SKIP
       </div>
       {% endif %}
+      
       {% if trade.atr_cap_triggered %}
-      <div class="dne-banner" style="margin-top:16px; font-size:14px; background: rgba(210,153,34,0.15); border: 2px solid var(--orange); color: var(--orange);">
-        ⚠ ATR Cap Applied — structural invalidation level is at ${{ "%.2f"|format(trade.sl_structural_level) }}
+      <div style="margin-top:16px; font-size:13px; background: rgba(210,153,34,0.1); border: 1px solid var(--orange); color: var(--orange); padding: 12px; border-radius: 8px;">
+        ⚠ <strong>ATR Cap Applied</strong>: The structural invalidation level was at ${{ "%.2f"|format(trade.sl_structural_level) }}, but risk was capped at 2.5x ATR.
       </div>
       {% endif %}
     </div>
   </div>
   {% endif %}
-
-  <!-- THESIS -->
-  <div class="section">
-    <div class="section-title">Trade Thesis</div>
-    <div class="section-body">
-      <p class="thesis">{{ thesis }}</p>
-    </div>
-  </div>
 
   <!-- INVALIDATION RISKS -->
   {% if invalidation_risks %}
@@ -491,10 +544,10 @@
 </div>
 
 <div class="footer">
-  SwingScope v1.0 &bull; Generated {{ date }} &bull; Rules-based analysis — no LLM inference
+  SwingScope v1.1 &bull; Generated {{ date }} &bull; Tactical Execution Workflow Applied
 </div>
 
-<!-- Plotly.js (self-contained) -->
+<!-- Plotly.js -->
 <script src="https://cdn.plot.ly/plotly-3.0.1.min.js"></script>
 <script>
   var chartData = {{ chart_json | safe }};

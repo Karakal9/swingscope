@@ -69,10 +69,13 @@ class SetupResult:
     warnings: list[str] = field(default_factory=list)
     hard_invalidated: bool = False
 
-    # Thesis variables
+    # Thesis variables precisely calculated from setup engine
     rvol_avg: float = 1.0
     rsi: float = 50.0
-    macd_state: str = "flattening"
+    macd_state: str = "neutral"
+    
+    # Execution Workflow Summary
+    summary_bullets: list[str] = field(default_factory=list)
 
 
 # ──────────────────────────────────────────────────────────────
@@ -931,6 +934,27 @@ def classify_setups(
 
         verdict = _map_verdict(final)
 
+        # ── Generate Summary Bullets ──────────────────────────
+        bullets = []
+        if context_modifier > 0:
+            bullets.append(f"Strong Catalyst: News/Sector alignment adds {context_modifier} pts to thesis.")
+        elif context_modifier < -10:
+            bullets.append(f"Structural Risk: Macro/Sector headwinds penalizing setup by {abs(context_modifier)} pts.")
+
+        bullets.append(f"RSI Status: {rsi_val:.1f} ({score_rsi_context(rsi_val)[1]}) — {'Momentum returning' if rsi_rising else 'Still resetting'}.")
+        
+        if structure.trend == Trend.STRONG_UPTREND:
+            bullets.append("MA Structure: 10/20/50 SMA stack is aligned and rising (A-TIER trend).")
+        else:
+            bullets.append(f"MA Structure: {structure.trend.value} — trend not yet perfectly stacked.")
+
+        if setup_type in (SetupType.BREAKOUT, SetupType.BULL_FLAG):
+            _, vcp_info = check_vcp_validity(df, structure)
+            bullets.append(f"VCP Audit: {vcp_info}")
+        
+        if is_distribution:
+            bullets.append(f"Weekly Analysis: Institutional distribution wicks detected ({wick_count} bars).")
+
         results.append(SetupResult(
             setup_type=setup_type,
             direction="LONG",
@@ -947,6 +971,7 @@ def classify_setups(
             rvol_avg=rvol_avg_val,
             rsi=rsi_val,
             macd_state=macd_state_val.lower().replace("_", " "),
+            summary_bullets=bullets,
         ))
 
     results.sort(key=lambda r: r.final_score, reverse=True)

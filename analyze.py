@@ -220,6 +220,7 @@ def analyze_ticker(
         swing_low = structure.swing_lows[-1].price if structure.swing_lows else float(last["Low"])
 
         trade = calculate_trade_params(
+            df=df,
             setup=top_setup,
             trigger_candle_high=trigger_high,
             last_swing_low=swing_low,

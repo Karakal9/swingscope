@@ -144,6 +144,44 @@ def _generate_invalidation_risks(
     return risks
 
 
+def _generate_swingalert_guide(setup: SetupResult, trade: Optional[TradeParams]) -> dict:
+    """Generate manual setup guide for SwingAlert app."""
+    if not trade:
+        return {}
+
+    rule_map = {
+        SetupType.EMA_PULLBACK: "sma_pullback_recovery",
+        SetupType.BREAKOUT: "volume_breakout",
+        SetupType.BULL_FLAG: "volume_breakout",
+        SetupType.VP_REVERSAL: "ma_reclaim",
+        SetupType.FIB_PULLBACK: "ma_reclaim",
+    }
+
+    rule = rule_map.get(setup.setup_type, "ma_reclaim")
+    
+    # Parameters vary by rule
+    params = {}
+    if rule == "sma_pullback_recovery":
+        params = {"Fast": 10, "Slow": 20, "Lookback": 10}
+    elif rule == "volume_breakout":
+        params = {"RVol": 1.5, "Lookback": 20}
+    elif rule == "ma_reclaim":
+        ma_val = trade.trigger_ma.replace(" SMA", "") if trade.trigger_ma != "None" else "20"
+        params = {"MA": ma_val, "Lookback": 5}
+
+    # Context message with placeholders
+    context = (
+        f"{{{{ticker}}}} triggered a {rule} at ${{{{price}}}}. "
+        f"Thesis: {setup.setup_type.value} setup supported by clean {trade.trigger_ma} alignment and positive sector context."
+    )
+
+    return {
+        "rule": rule,
+        "params": params,
+        "context": context
+    }
+
+
 # ──────────────────────────────────────────────────────────────
 # Score class / color helpers
 # ──────────────────────────────────────────────────────────────
@@ -243,6 +281,7 @@ def render_report(
     # Generate thesis and risks
     thesis = _generate_thesis(ticker, setup, vp, fib, patterns)
     invalidation_risks = _generate_invalidation_risks(setup, earnings)
+    swingalert_guide = _generate_swingalert_guide(setup, trade)
 
     # ATR
     atr = float(df["ATR_14"].iloc[-1]) if "ATR_14" in df.columns else 0
@@ -290,7 +329,9 @@ def render_report(
         min_rr=cfg.MIN_RR_RATIO,
         # Thesis / Risks
         thesis=thesis,
+        summary_bullets=setup.summary_bullets,
         invalidation_risks=invalidation_risks,
+        swingalert_guide=swingalert_guide,
         debt_to_equity=debt_to_equity,
         price_momentum_grade=price_momentum_grade,
         adx_val=adx_val,

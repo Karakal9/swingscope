@@ -41,9 +41,17 @@ class TradeParams:
     sl_structural_level: float = 0.0
     atr_cap_triggered: bool = False
 
+    # ── Tactical Data Row (Execution Workflow) ───────────────
+    disaster_line: float = 0.0
+    zone_floor: float = 0.0
+    zone_ceiling: float = 0.0
+    min_days: int = 3
+    trigger_ma: str = "None"
+    proximity: float = 0.0
 
 
 def calculate_trade_params(
+    df: pd.DataFrame,
     setup: SetupResult,
     trigger_candle_high: float,
     last_swing_low: float,
@@ -52,29 +60,10 @@ def calculate_trade_params(
     vp: Optional[VolumeProfile] = None,
     account_size: int = cfg.ACCOUNT_SIZE,
 ) -> TradeParams:
-    """Calculate trade parameters for the given setup.
+    """Calculate trade parameters for the given setup."""
+    last = df.iloc[-1]
+    close = float(last["Close"])
 
-    Parameters
-    ----------
-    setup : SetupResult
-        The classified setup (used for conviction tier → risk %).
-    trigger_candle_high : float
-        High of the most recent setup candle.
-    last_swing_low : float
-        Price of the nearest swing low (for structural stop).
-    atr : float
-        Current ATR_14 value.
-    resistance_levels : list[SRLevel]
-        Resistance levels above current price.
-    vp : VolumeProfile or None
-        Volume profile for HVN-based TP1.
-    account_size : int
-        Account value for position sizing.
-
-    Returns
-    -------
-    TradeParams
-    """
     # ── Entry ────────────────────────────────────────────────
     entry = trigger_candle_high + (cfg.ENTRY_BUFFER_ATR * atr)
 
@@ -178,6 +167,33 @@ def calculate_trade_params(
             position_shares, entry, position_notional, max_notional,
         )
 
+    # ── Tactical Data ────────────────────────────────────────
+    # Zone Ceiling/Floor (The "MA Pocket")
+    sma10 = float(last["SMA_10"]) if "SMA_10" in df.columns else close
+    sma20 = float(last["SMA_20"]) if "SMA_20" in df.columns else close
+    sma50 = float(last["SMA_50"]) if "SMA_50" in df.columns else close
+
+    trigger_ma = "None"
+    zone_ceiling = 0.0
+    zone_floor = 0.0
+    
+    # Logic for Identifying Trigger MA and Zone
+    if abs(close - sma10) < abs(close - sma20) and abs(close - sma10) < abs(close - sma50):
+        trigger_ma = "10 SMA"
+        zone_ceiling = sma10
+        zone_floor = sma20
+    elif abs(close - sma20) < abs(close - sma50):
+        trigger_ma = "20 SMA"
+        zone_ceiling = sma20
+        zone_floor = sma50
+    else:
+        trigger_ma = "50 SMA"
+        zone_ceiling = sma50
+        zone_floor = sma50 * 0.98 # default 2% buffer if no lower MA
+
+    # Proximity is distance to Entry
+    proximity = abs(entry - close)
+
     params = TradeParams(
         entry=round(entry, 2),
         stop_loss=round(stop_loss, 2),
@@ -196,6 +212,14 @@ def calculate_trade_params(
         sl_method=sl_method,
         sl_structural_level=round(sl_base, 2),
         atr_cap_triggered=atr_cap_triggered,
+        
+        # New Tactical Data
+        disaster_line=round(stop_loss, 2),
+        zone_floor=round(zone_floor, 2),
+        zone_ceiling=round(zone_ceiling, 2),
+        min_days=3, # standard cool-off
+        trigger_ma=trigger_ma,
+        proximity=round(proximity, 2),
     )
 
     logger.info(

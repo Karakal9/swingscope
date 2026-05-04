@@ -266,7 +266,7 @@
 
             // Hide old results, show UI loader
             frame.style.opacity = '0';
-            setTimeout(() => { frame.srcdoc = ''; }, 300); // Clear old content
+            frame.srcdoc = ''; // Clear old content immediately
 
             // If they are on mobile keyboard, blur the input to hide the keyboard
             input.blur();
