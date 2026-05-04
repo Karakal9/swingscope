@@ -189,10 +189,11 @@ def get_ticker_info(ticker: str) -> dict:
             "sector": info.get("sector", "Unknown"),
             "industry": info.get("industry", "Unknown"),
             "name": info.get("shortName", ticker),
+            "debtToEquity": info.get("debtToEquity", 0.0),
         }
     except Exception as exc:
         logger.warning("%s: failed to get ticker info — %s", ticker, exc)
-        return {"sector": "Unknown", "industry": "Unknown", "name": ticker}
+        return {"sector": "Unknown", "industry": "Unknown", "name": ticker, "debtToEquity": 0.0}
 
 
 def get_earnings(ticker: str) -> dict:

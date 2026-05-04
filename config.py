@@ -62,13 +62,13 @@ BACKOFF_BASE_SECS: Final[float] = 2.0      # Exponential backoff base (2, 4, 8 �
 # ─────────────────────────────────────────────
 # Scoring Weights (Section 9.1)
 # ─────────────────────────────────────────────
-SCORE_TREND_MAX: Final[int] = 30
+SCORE_TREND_MAX: Final[int] = 20
 SCORE_PATTERN_MAX: Final[int] = 20
 SCORE_RVOL_MAX: Final[int] = 15
 SCORE_RSI_MAX: Final[int] = 15
 SCORE_OBV_MAX: Final[int] = 10
 SCORE_MACD_MAX: Final[int] = 10
-SCORE_VP_MAX: Final[int] = 10
+SCORE_VP_MAX: Final[int] = 20
 
 # Context modifiers
 MOD_SECTOR_TAILWIND: Final[int] = 8
@@ -79,11 +79,22 @@ MOD_EARNINGS_WATCH: Final[int] = -5        # 21–45 days
 MOD_EARNINGS_CAUTION: Final[int] = -10     # 8–21 days
 MOD_EARNINGS_IMMINENT: Final[int] = -20    # ≤ 7 days
 
-# Score thresholds
-SCORE_HIGH_CONVICTION: Final[int] = 85
-SCORE_VALID: Final[int] = 70
-SCORE_MARGINAL: Final[int] = 55
+# Score thresholds (normalized to 100)
+SCORE_HIGH_CONVICTION: Final[int] = 77
+SCORE_VALID: Final[int] = 64
+SCORE_MARGINAL: Final[int] = 50
 SCORE_WEAK: Final[int] = 40
+
+# ─────────────────────────────────────────────
+# Setup Journal Mapping (Section 2.2)
+# ─────────────────────────────────────────────
+SETUP_JOURNAL_MAPPING: Final[dict[str, str]] = {
+    "EMA Pullback": "Bounce",
+    "Fibonacci Pullback": "Trend",
+    "Bull Flag / Pennant": "Trend",
+    "Breakout from Base": "Breakout",
+    "Volume Profile Reversal": "Bounce",
+}
 
 # ─────────────────────────────────────────────
 # Setup Classifier Thresholds

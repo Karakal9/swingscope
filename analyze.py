@@ -44,6 +44,7 @@ def analyze_ticker(
     output_dir: Optional[Path] = None,
     regime=None,
     force_refresh: bool = False,
+    invpro_health: int = 3,
 ) -> Optional[dict]:
     """Run the full analysis pipeline for a single ticker.
 
@@ -89,7 +90,7 @@ def analyze_ticker(
                     "cached_at": mtime.strftime("%Y-%m-%d %H:%M"),
                 }
 
-    from data.fetcher import fetch_ohlcv, fetch_weekly
+    from data.fetcher import fetch_ohlcv, fetch_weekly, get_ticker_info
     from indicators.engine import add_indicators
     from indicators.volume_profile import compute_volume_profile
     from analysis.structure import analyze_structure, classify_trend
@@ -111,6 +112,12 @@ def analyze_ticker(
     if df is None or len(df) < 50:
         console.print(f"[red]✗ {ticker}: insufficient data — skipping[/red]")
         return None
+
+    console.print("[dim]Fetching fundamentals…[/dim]")
+    info = get_ticker_info(ticker)
+    raw_de = info.get("debtToEquity", 0.0)
+    # yfinance returns debtToEquity usually as a percentage
+    debt_to_equity = raw_de / 100.0 if raw_de > 10.0 else raw_de
 
     # ── Step 2: Indicators ───────────────────────────────────
     console.print("[dim]Computing indicators…[/dim]")
@@ -176,6 +183,9 @@ def analyze_ticker(
         df, structure, patterns, vp, fib,
         context_modifier=context_modifier,
         weekly_trend=weekly_trend,
+        debt_to_equity=debt_to_equity,
+        invpro_health=invpro_health,
+        sector_rs_direction=sector.rs_direction,
     )
     top_setup = setups[0]
 
@@ -228,13 +238,29 @@ def analyze_ticker(
 
     console.print(f"[green]✓ Report: {report_path}[/green]")
 
+    # Discrete fields for Journal
+    journal_setup = cfg.SETUP_JOURNAL_MAPPING.get(top_setup.setup_type.value, "Unknown")
+    is_vcp = any(p.name == "VCP" and p.confirmed for p in patterns)
+
     return {
         "ticker": ticker,
         "setup": top_setup.setup_type.value,
+        "journal_setup": journal_setup,
         "score": top_setup.final_score,
         "verdict": top_setup.verdict.value,
         "rr": trade.rr_tp1 if trade else 0,
         "report": str(report_path),
+        "discrete_fields": {
+            "pattern_type": top_setup.setup_type.value,
+            "pattern_score": top_setup.final_score,
+            "invpro_health": invpro_health,
+            "vcp_valid": "Yes" if is_vcp else "No",
+            "weekly_alignment": weekly_trend.name if weekly_trend else "Unknown",
+            "rsi_at_entry": top_setup.rsi,
+            "atr_at_entry": round(atr, 2),
+            "debt_equity": round(debt_to_equity, 2),
+            "sector_rs": sector.rs_direction,
+        }
     }
 
 
@@ -260,6 +286,13 @@ def main() -> None:
         "--no-cache",
         action="store_true",
         help="Force fresh data fetch (ignore cache)",
+    )
+    parser.add_argument(
+        "--invpro",
+        type=int,
+        default=3,
+        choices=[1, 2, 3, 4, 5],
+        help="InvestorPro health grade (1=Very Weak, 5=Excellent, default 3)",
     )
     args = parser.parse_args()
 
@@ -288,7 +321,14 @@ def main() -> None:
     for i, ticker in enumerate(args.tickers):
         ticker = ticker.upper().strip()
         try:
-            result = analyze_ticker(ticker, args.account, output_dir, regime=regime, force_refresh=args.no_cache)
+            result = analyze_ticker(
+                ticker, 
+                args.account, 
+                output_dir, 
+                regime=regime, 
+                force_refresh=args.no_cache,
+                invpro_health=args.invpro,
+            )
             if result:
                 results.append(result)
         except Exception as exc:

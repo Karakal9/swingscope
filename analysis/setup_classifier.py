@@ -81,10 +81,10 @@ class SetupResult:
 def _score_trend(trend: Trend) -> ScoreFactor:
     """Score factor 1 — Trend Alignment (max 30)."""
     mapping = {
-        Trend.STRONG_UPTREND: (30, "All EMAs stacked & rising"),
-        Trend.UPTREND:        (22, "EMA50 + EMA200 aligned"),
-        Trend.WEAK_UPTREND:   (12, "EMA50 only"),
-        Trend.RANGE:          (5,  "Mixed / ranging"),
+        Trend.STRONG_UPTREND: (20, "All EMAs stacked & rising"),
+        Trend.UPTREND:        (15, "EMA50 + EMA200 aligned"),
+        Trend.WEAK_UPTREND:   (8, "EMA50 only"),
+        Trend.RANGE:          (3,  "Mixed / ranging"),
         Trend.DOWNTREND:      (0,  "Below EMA50 — HARD STOP"),
     }
     pts, detail = mapping.get(trend, (0, "Unknown"))
@@ -225,10 +225,10 @@ def _score_vp_confluence(
     for lv in key_levels:
         dist = abs(current_price - lv)
         if dist <= near_thresh:
-            return ScoreFactor("VP Confluence", cfg.SCORE_VP_MAX, 10,
+            return ScoreFactor("VP Confluence", cfg.SCORE_VP_MAX, 20,
                                f"At VP level ({lv:.2f})")
         if dist <= far_thresh:
-            return ScoreFactor("VP Confluence", cfg.SCORE_VP_MAX, 5,
+            return ScoreFactor("VP Confluence", cfg.SCORE_VP_MAX, 10,
                                f"Near VP level ({lv:.2f})")
 
     return ScoreFactor("VP Confluence", cfg.SCORE_VP_MAX, 0, "No VP proximity")
@@ -608,6 +608,9 @@ def classify_setups(
     fib: Optional[FibResult],
     context_modifier: int = 0,
     weekly_trend: Optional[Trend] = None,
+    debt_to_equity: float = 0.0,
+    invpro_health: int = 3,
+    sector_rs_direction: str = "Neutral",
 ) -> list[SetupResult]:
     """Evaluate all 5 setups and return ranked results.
 
@@ -644,6 +647,29 @@ def classify_setups(
     hard_gates: list[str] = []
     if structure.trend == Trend.DOWNTREND:
         hard_gates.append(f"Price below EMA50 — NO LONG SETUP")
+        
+    # Sector RS Validation
+    if sector_rs_direction == "Uptrend":
+        context_modifier += 5
+    elif sector_rs_direction == "Downtrend":
+        context_modifier -= 10
+        
+    # D/E Ratio Gate
+    if debt_to_equity > 2.0:
+        # Check if exceptional VP and Trend
+        # Note: We don't have the scores yet, so we will append to hard gates later if condition fails.
+        # But we can just enforce the penalty for now, and apply the hard gate check after scores are computed.
+        pass
+    elif debt_to_equity > 1.0:
+        context_modifier -= 8
+        
+    # InvestorPro Health Gate
+    if invpro_health == 5:
+        context_modifier += 5
+    elif invpro_health == 4:
+        context_modifier += 3
+    elif invpro_health == 2:
+        context_modifier -= 5
 
     # OBV divergence (computed in scorer, but we flag it here too)
     if "OBV" in df.columns and len(df) >= 20:
@@ -675,6 +701,16 @@ def classify_setups(
     common_factors = [f_trend, f_pattern, f_rvol, f_rsi, f_obv, f_macd, f_vp]
     raw = sum(f.earned for f in common_factors)
 
+    # Post-scoring Fundamental Gates
+    if debt_to_equity > 2.0:
+        if f_vp.earned < 16 or f_trend.earned < 15:
+            hard_gates.append(f"HIGH LEVERAGE (D/E={debt_to_equity:.2f}) without exceptional VP/Trend")
+        else:
+            context_modifier -= 8
+            
+    if debt_to_equity > 1.0 and debt_to_equity <= 2.0:
+        pass # Penalty already applied above, will add warning in per-setup evaluation
+        
     # ── Per-setup evaluation ─────────────────────────────────
     setup_checks = {
         SetupType.EMA_PULLBACK: lambda: _check_ema_pullback(df, patterns, structure),
@@ -708,12 +744,34 @@ def classify_setups(
             elif n == 1:
                 final = min(final, cfg.SCORE_VALID - 1)
 
+        # Fundamental Warnings & Setup-specific Gates
+        if debt_to_equity > 1.0:
+            warnings.append(f"HIGH LEVERAGE (D/E={debt_to_equity:.2f}) — elevated structural risk")
+        if invpro_health == 2:
+            warnings.append("InvestorPro Health Weak")
+        if invpro_health == 1 and setup_type in (SetupType.FIB_PULLBACK, SetupType.BULL_FLAG, SetupType.EMA_PULLBACK):
+            hard_reasons.append("InvestorPro Health Very Weak — Trend Setup Rejected")
+            final = 0
+            hard_inv = True
+
         # Cap breakout on low RVol
         if setup_type == SetupType.BREAKOUT:
             rvol = float(last["RVOL"]) if "RVOL" in df.columns else 1
             if rvol < 0.5:
                 final = min(final, 50)
                 warnings.append(f"FALSE BREAKOUT warning — RVol={rvol:.2f}")
+                
+        # EMA Pullback Pass-Through Fix
+        if setup_type == SetupType.EMA_PULLBACK and final < 40:
+            hard_reasons.append(f"EMA Pullback score < 40 ({final}) — Pattern not validated")
+            final = 0
+            hard_inv = True
+            
+        # Compliance Gap Hard Gate
+        if setup_type in (SetupType.FIB_PULLBACK, SetupType.BULL_FLAG) and final < 50:
+            hard_reasons.append(f"REJECTED: Score {final}/100 is below the 50-point validity floor for {setup_type.value}.")
+            final = 0
+            hard_inv = True
 
         verdict = _map_verdict(final)
 

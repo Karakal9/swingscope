@@ -35,6 +35,7 @@ class SectorResult:
     macd_positive: bool = False
     verdict: str = "NEUTRAL"          # TAILWIND, NEUTRAL, HEADWIND
     modifier: int = 0                 # pts to add to setup score
+    rs_direction: str = "Neutral"     # Uptrend, Neutral, Downtrend
 
 
 def analyze_sector(ticker: str) -> SectorResult:
@@ -69,16 +70,30 @@ def analyze_sector(ticker: str) -> SectorResult:
         logger.warning("%s: failed to fetch ETF/SPY data — returning neutral", ticker)
         return SectorResult(sector=sector, etf=etf_symbol, verdict="NEUTRAL", modifier=0)
 
-    # Compute EMAs on ETF
+    # Compute EMAs and SMAs on ETF
     ema50 = EMAIndicator(close=etf_df["Close"], window=50, fillna=False)
     ema200 = EMAIndicator(close=etf_df["Close"], window=200, fillna=False)
     etf_df["EMA_50"] = ema50.ema_indicator()
     etf_df["EMA_200"] = ema200.ema_indicator()
+    
+    sma20 = etf_df["Close"].rolling(window=20).mean()
+    sma50 = etf_df["Close"].rolling(window=50).mean()
+    etf_df["SMA_20"] = sma20
+    etf_df["SMA_50"] = sma50
 
     last_etf = etf_df.iloc[-1]
     etf_close = float(last_etf["Close"])
     above_ema50 = etf_close > float(last_etf["EMA_50"]) if pd.notna(last_etf["EMA_50"]) else False
     above_ema200 = etf_close > float(last_etf["EMA_200"]) if pd.notna(last_etf["EMA_200"]) else False
+    
+    above_sma20 = etf_close > float(last_etf["SMA_20"]) if pd.notna(last_etf["SMA_20"]) else False
+    above_sma50_sma = etf_close > float(last_etf["SMA_50"]) if pd.notna(last_etf["SMA_50"]) else False
+    
+    rs_direction = "Neutral"
+    if above_sma20 and above_sma50_sma:
+        rs_direction = "Uptrend"
+    elif not above_sma20 and not above_sma50_sma:
+        rs_direction = "Downtrend"
 
     # Relative Strength: ETF 20-day return / SPY 20-day return (Spread)
     alpha = 0.0
@@ -137,6 +152,7 @@ def analyze_sector(ticker: str) -> SectorResult:
         macd_positive=macd_positive,
         verdict=verdict,
         modifier=modifier,
+        rs_direction=rs_direction,
     )
     logger.info(
         "Sector: %s (ETF=%s)  Alpha=%.2f%%  EMA50=%s  Verdict=%s  Mod=%+d",
