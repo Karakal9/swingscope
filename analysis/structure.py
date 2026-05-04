@@ -111,8 +111,7 @@ def detect_swings(
 def classify_trend(df: pd.DataFrame) -> Trend:
     """Classify the current trend regime from the latest bar.
 
-    Requires ``EMA_21``, ``EMA_50``, ``EMA_200`` columns (from
-    ``indicators.engine.add_indicators``).
+    Uses the 10, 20, and 50 SMA stack for high-probability trend analysis.
 
     Parameters
     ----------
@@ -124,31 +123,30 @@ def classify_trend(df: pd.DataFrame) -> Trend:
 
     last, prev = df.iloc[-1], df.iloc[-2]
     close  = float(last["Close"])
-    ema21  = float(last["EMA_21"])
-    ema50  = float(last["EMA_50"])
-    ema200 = float(last["EMA_200"])
+    sma10  = float(last["SMA_10"])
+    sma20  = float(last["SMA_20"])
+    sma50  = float(last["SMA_50"])
 
-    ema21_rising  = ema21  > float(prev["EMA_21"])
-    ema50_rising  = ema50  > float(prev["EMA_50"])
-    ema200_rising = ema200 > float(prev["EMA_200"])
+    sma10_rising = sma10 > float(prev["SMA_10"])
+    sma20_rising = sma20 > float(prev["SMA_20"])
+    sma50_rising = sma50 > float(prev["SMA_50"])
 
-    # All stacked AND all rising
-    if close > ema21 > ema50 > ema200 and ema21_rising and ema50_rising and ema200_rising:
+    # All stacked AND all rising (Core Trend Setup criteria)
+    if close > sma10 > sma20 > sma50 and sma10_rising and sma20_rising and sma50_rising:
         return Trend.STRONG_UPTREND
 
-    # Stacked AND both EMA50/200 slopes positive
-    if close > ema50 > ema200 and ema50_rising and ema200_rising:
+    # Stacked but maybe not all rising
+    if close > sma20 > sma50 and sma50_rising:
         return Trend.UPTREND
 
-    # Above EMA50 but EMA200 rolling over
-    if close > ema50 and not ema200_rising:
-        return Trend.WEAK_UPTREND
+    # Above SMA50 but weak structure
+    if close > sma50:
+        if sma50_rising:
+            return Trend.UPTREND
+        else:
+            return Trend.WEAK_UPTREND
 
-    # Stacked but at least one EMA declining — topping/distribution
-    if close > ema50 > ema200 and (not ema50_rising or not ema200_rising):
-        return Trend.RANGE
-
-    if close < ema50:
+    if close < sma50:
         return Trend.DOWNTREND
 
     return Trend.RANGE

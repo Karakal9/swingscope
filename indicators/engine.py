@@ -51,6 +51,10 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
         ema = EMAIndicator(close=close, window=length, fillna=False)
         df[col] = ema.ema_indicator()
 
+    # ── Trend: SMAs (for 10/20/50 stack) ──────────────────────
+    for length in (10, 20, 50):
+        df[f"SMA_{length}"] = close.rolling(window=length).mean()
+
     # ── Trend: VWAP (session-anchored approximation) ─────────
     df["VWAP"] = _rolling_vwap(df, length=20)
 

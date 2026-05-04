@@ -81,11 +81,11 @@ class SetupResult:
 def _score_trend(trend: Trend) -> ScoreFactor:
     """Score factor 1 — Trend Alignment (max 30)."""
     mapping = {
-        Trend.STRONG_UPTREND: (20, "All EMAs stacked & rising"),
-        Trend.UPTREND:        (15, "EMA50 + EMA200 aligned"),
-        Trend.WEAK_UPTREND:   (8, "EMA50 only"),
+        Trend.STRONG_UPTREND: (20, "10/20/50 SMAs stacked & rising"),
+        Trend.UPTREND:        (15, "Above SMA50 rising"),
+        Trend.WEAK_UPTREND:   (8, "Above SMA50 flat/falling"),
         Trend.RANGE:          (3,  "Mixed / ranging"),
-        Trend.DOWNTREND:      (0,  "Below EMA50 — HARD STOP"),
+        Trend.DOWNTREND:      (0,  "Below SMA50 — HARD STOP"),
     }
     pts, detail = mapping.get(trend, (0, "Unknown"))
     return ScoreFactor("Trend Alignment", cfg.SCORE_TREND_MAX, pts, detail)
@@ -357,15 +357,18 @@ def _check_breakout(df: pd.DataFrame, structure: StructureResult, vp: Optional[V
         if dist_pct > cfg.BREAKOUT_COIL_PCT:
             soft_reasons.append(f"Not coiling near resistance ({dist_pct:.1%} away)")
 
+    # ── VCP Audit (Tightening & Volume Dry-up) ───────────────
+    vcp_valid, vcp_detail = check_vcp_validity(df, structure)
+    if not vcp_valid:
+        soft_reasons.append(f"VCP Audit Failed: {vcp_detail}")
+    else:
+        warnings.append(f"VCP_VALID: {vcp_detail}")
+
     rvol = float(last["RVOL"]) if "RVOL" in df.columns else 1
     if rvol < cfg.BREAKOUT_RVOL_EXPANSION:
         hard_reasons.append(f"Breakout on low volume (RVol={rvol:.2f})")
 
-    if len(df) >= 6:
-        base_rvol = float(df["RVOL"].iloc[-6:-1].mean())
-        if base_rvol > cfg.BREAKOUT_RVOL_DRY:
-            soft_reasons.append(f"Base volume not dry (avg RVol={base_rvol:.2f})")
-
+    # Bollinger Band Squeeze (Coiling)
     if "BB_width" in df.columns and len(df) >= 60:
         is_squeeze, squeeze_duration, _ = check_bb_squeeze(df)
         if not is_squeeze:
@@ -580,6 +583,56 @@ def _check_fib_pullback(
         hard_reasons.append("Weekly trend opposing")
 
     return len(hard_reasons) == 0, hard_reasons, soft_reasons, warnings
+
+
+def check_vcp_validity(
+    df: pd.DataFrame,
+    structure: StructureResult,
+    min_waves: int = 2,
+) -> tuple[bool, str]:
+    """Detect Volatility Contraction Patterns (VCP).
+
+    Checks for:
+    1. Tightening price ranges from left to right (decreasing wave amplitude).
+    2. Volume dry-up on the right side of the base.
+
+    Returns (is_vcp_valid, detail_string).
+    """
+    # Merge all swings and sort chronologically
+    all_swings = structure.swing_highs + structure.swing_lows
+    all_swings.sort(key=lambda s: s.idx)
+
+    if len(all_swings) < 4:
+        return False, "Insufficient swings for VCP audit"
+
+    # Extract wave amplitudes: distance between consecutive opposite swings
+    waves = []
+    for i in range(1, len(all_swings)):
+        if all_swings[i].kind != all_swings[i - 1].kind:
+            amp = abs(all_swings[i].price - all_swings[i - 1].price)
+            waves.append(amp)
+
+    if len(waves) < min_waves:
+        return False, f"Only {len(waves)} wave(s) — need {min_waves}+"
+
+    # Check recent waves for tightening (each <= 110% of the previous, i.e. decreasing)
+    recent = waves[-min(4, len(waves)):]
+    is_tightening = all(recent[i] <= recent[i - 1] * 1.10 for i in range(1, len(recent)))
+
+    # Check volume dry-up on the right side of the base
+    vol_dry = False
+    if len(df) >= 10 and "Volume" in df.columns:
+        vol_right = float(df["Volume"].iloc[-5:].mean())
+        vol_left = float(df["Volume"].iloc[-10:-5].mean())
+        vol_dry = vol_left > 0 and vol_right < vol_left
+
+    wave_str = ", ".join([f"{w:.2f}" for w in recent])
+    if is_tightening and vol_dry:
+        return True, f"Tightening waves ({wave_str}) + Vol dry-up"
+    elif is_tightening:
+        return True, f"Price tightening ({wave_str}), vol not yet dry"
+
+    return False, f"Erratic ranges ({wave_str})"
 
 
 # ──────────────────────────────────────────────────────────────

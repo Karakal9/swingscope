@@ -79,27 +79,52 @@ def calculate_trade_params(
     entry = trigger_candle_high + (cfg.ENTRY_BUFFER_ATR * atr)
 
     # ── Stop Loss ────────────────────────────────────────────
-    sl_structural = last_swing_low - (cfg.SL_SWING_BUFFER_ATR * atr)
-    
+    # The stop loss pipeline: structural → liquidity buffer → 2x ATR floor → risk cap
+
+    # 1. Start with structural stop
+    sl_base = last_swing_low - (cfg.SL_SWING_BUFFER_ATR * atr)
+
+    # 2. Apply Liquidity Buffer FIRST (odd-cent endings)
+    # Never place on round number or exact MA. Use .41, .87, .11, .97
+    def _nearest_odd_cent_below(price: float) -> float:
+        import math
+        price = round(price, 2)
+        cents = int(round((price - math.floor(price)) * 100))
+        targets = [11, 41, 87, 97]
+        lower = [t for t in targets if t < cents]
+        if lower:
+            return math.floor(price) + (max(lower) / 100.0)
+        else:
+            return math.floor(price) - 1.0 + (max(targets) / 100.0)
+
+    sl_base = _nearest_odd_cent_below(sl_base)
+
+    # 3. Enforce the 2x ATR Rule (Non-Negotiable)
+    # The distance Entry→Stop MUST be at least 2x ATR
+    min_risk = 2.0 * atr
+    if (entry - sl_base) < min_risk:
+        sl_base = entry - min_risk
+        # Re-apply buffer after widening
+        sl_base = _nearest_odd_cent_below(sl_base)
+
+    # 4. Apply setup-specific risk cap (if risk got too large)
     cap_multiplier = cfg.SL_ATR_CAPS.get(setup.setup_type.value, 2.5)
     max_risk = cap_multiplier * atr
-    
-    # Calculate the risk if we used the structural stop
-    structural_risk = entry - sl_structural
-    
+
     sl_method = "STRUCTURAL"
     atr_cap_triggered = False
-    stop_loss = sl_structural
-    
-    # Fallback: If structural stop enforces absurd risk, use setup-specific ATR cap
-    if structural_risk > max_risk:
+
+    if (entry - sl_base) > max_risk:
         stop_loss = entry - max_risk
+        stop_loss = _nearest_odd_cent_below(stop_loss)
         sl_method = "ATR_CAP"
         atr_cap_triggered = True
+    else:
+        stop_loss = sl_base
 
     risk = entry - stop_loss
     if risk <= 0:
-        risk = atr  # fallback to 1 ATR
+        risk = atr  # safety fallback
 
     # ── Profit Targets ───────────────────────────────────────
     # TP1: nearest HVN or S/R above entry
@@ -169,7 +194,7 @@ def calculate_trade_params(
         rr_valid=rr_valid,
         account_size=account_size,
         sl_method=sl_method,
-        sl_structural_level=round(sl_structural, 2),
+        sl_structural_level=round(sl_base, 2),
         atr_cap_triggered=atr_cap_triggered,
     )
 
