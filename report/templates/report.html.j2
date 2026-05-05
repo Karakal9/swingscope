@@ -383,15 +383,25 @@
       <div class="section-body">
         <p><strong>{{ sector }}</strong> ({{ sector_etf }})</p>
         <p>Market Condition: <strong>{{ sector_rs_market_cond }}</strong></p>
-        <p>Relative Strength: <strong>{{ sector_rs_label }} (Alpha: {% if sector_alpha > 0 %}+{% endif %}{{ sector_alpha }}%)</strong></p>
+        <p>Relative Strength: <strong>{{ sector_rs_label }} (Alpha 20D: {% if sector_alpha > 0 %}+{% endif %}{{ sector_alpha }}%)</strong></p>
+        {% if sector_alpha_10d is defined %}
+        <p>Rotation Signal: <strong>Alpha 10D: {% if sector_alpha_10d > 0 %}+{% endif %}{{ sector_alpha_10d }}%</strong>
+          {% if sector_improving %}<span style="color:var(--blue); font-weight:700;"> ↑ Catching Up</span>{% endif %}
+        </p>
+        {% endif %}
         <p>Trend: {{ "Above" if sector_above_ema50 else "Below" }} EMA50 &bull; MACD: {{ "Positive ✓" if sector_macd_positive else "Negative ✗" }}</p>
         {% if not sector_macd_positive and sector_alpha > 0 %}
         <p style="margin-top:8px; color:var(--orange); font-size:13px; font-weight:600;">
           ⚠ Sector RS strong but MACD deteriorating — momentum may be peaking
         </p>
         {% endif %}
+        {% if sector_improving %}
+        <p style="margin-top:8px; color:var(--blue); font-size:13px; font-weight:600;">
+          ↗ Sector is in early rotation — 10D momentum positive while 20D still catching up. No penalty applied.
+        </p>
+        {% endif %}
         <p style="margin-top:8px;">
-          <span class="setup-badge {% if sector_verdict == 'TAILWIND' %}score-high{% elif sector_verdict == 'HEADWIND' %}score-invalid{% else %}score-weak{% endif %}">
+          <span class="setup-badge {% if sector_verdict == 'TAILWIND' %}score-high{% elif sector_verdict == 'IMPROVING' %}score-valid{% elif sector_verdict == 'HEADWIND' %}score-invalid{% else %}score-weak{% endif %}">
             {{ sector_verdict }} ({{ "%+d"|format(sector_modifier) }} pts)
           </span>
         </p>

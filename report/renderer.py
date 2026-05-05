@@ -307,6 +307,8 @@ def render_report(
         sector_etf=sector.etf,
         sector_above_ema50=sector.etf_above_ema50,
         sector_alpha=sector.relative_strength,
+        sector_alpha_10d=sector.alpha_10d,
+        sector_improving=sector.improving,
         sector_rs_market_cond=sector.rs_market_cond,
         sector_rs_label=sector.rs_label,
         sector_macd_positive=sector.macd_positive,

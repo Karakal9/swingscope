@@ -29,11 +29,13 @@ class SectorResult:
     etf: str
     etf_above_ema50: bool = False
     etf_above_ema200: bool = False
-    relative_strength: float = 0.0    # RS Alpha (%)
+    relative_strength: float = 0.0    # RS Alpha 20D (%)
+    alpha_10d: float = 0.0            # RS Alpha 10D (%)
+    improving: bool = False           # True when 20D negative but 10D positive
     rs_market_cond: str = "Unknown"
     rs_label: str = "Unknown"
     macd_positive: bool = False
-    verdict: str = "NEUTRAL"          # TAILWIND, NEUTRAL, HEADWIND
+    verdict: str = "NEUTRAL"          # TAILWIND, IMPROVING, NEUTRAL, HEADWIND
     modifier: int = 0                 # pts to add to setup score
     rs_direction: str = "Neutral"     # Uptrend, Neutral, Downtrend
 
@@ -43,6 +45,14 @@ def analyze_sector(ticker: str) -> SectorResult:
 
     Fetches the ticker's sector via ``yfinance``, maps it to a SPDR ETF,
     computes EMA trend, relative strength vs SPY, and MACD momentum.
+
+    The verdict uses a dual-timeframe approach:
+    - **20-day Alpha** determines the baseline (TAILWIND vs HEADWIND).
+    - **10-day Alpha** detects early rotation. If the 20D alpha is negative
+      but the 10D alpha is positive, the sector is classified as IMPROVING
+      (0 pts) instead of HEADWIND (-10 pts). This prevents the system from
+      penalizing stocks in sectors that the market_analyzer already identifies
+      as having fresh positive momentum.
 
     Parameters
     ----------
@@ -95,8 +105,9 @@ def analyze_sector(ticker: str) -> SectorResult:
     elif not above_sma20 and not above_sma50_sma:
         rs_direction = "Downtrend"
 
-    # Relative Strength: ETF 20-day return / SPY 20-day return (Spread)
-    alpha = 0.0
+    # ── Relative Strength: Dual-timeframe Alpha ──────────────
+    alpha = 0.0       # 20-day alpha (institutional flow)
+    alpha_10d = 0.0   # 10-day alpha (rotation signal)
     etf_ret = 0.0
     spy_ret = 0.0
     rs_market_cond = "Unknown"
@@ -122,6 +133,17 @@ def analyze_sector(ticker: str) -> SectorResult:
             rs_market_cond = "Divergence"
             rs_label = "Weakest (Falling despite market lift)"
 
+    # 10-day alpha for rotation detection
+    if len(etf_df) >= 10 and len(spy_df) >= 10:
+        etf_prev_10 = float(etf_df["Close"].iloc[-10])
+        spy_prev_10 = float(spy_df["Close"].iloc[-10])
+        etf_ret_10 = (float(etf_df["Close"].iloc[-1]) / etf_prev_10) - 1 if etf_prev_10 != 0 else 0
+        spy_ret_10 = (float(spy_df["Close"].iloc[-1]) / spy_prev_10) - 1 if spy_prev_10 != 0 else 0
+        alpha_10d = etf_ret_10 - spy_ret_10
+
+    # Detect "Improving" state: 20D lagging but 10D outperforming
+    improving = alpha <= 0 and alpha_10d > 0
+
     # MACD momentum
     macd_ind = MACD(close=etf_df["Close"], window_slow=26, window_fast=12, window_sign=9, fillna=False)
     macd_positive = False
@@ -130,10 +152,18 @@ def analyze_sector(ticker: str) -> SectorResult:
         hist = float(macd_diff.iloc[-1])
         macd_positive = hist > 0
 
-    # Verdict
+    # ── Verdict (dual-timeframe) ─────────────────────────────
+    # TAILWIND:   20D alpha > 0 AND price above EMA50 → full bonus (+8)
+    # IMPROVING:  20D alpha ≤ 0 BUT 10D alpha > 0     → neutral (0)
+    #             Sector is in early rotation, don't penalize
+    # HEADWIND:   20D alpha ≤ 0, 10D alpha ≤ 0        → penalty (-10)
+    #             No sign of rotation, still lagging on all timeframes
     if alpha > 0 and above_ema50:
         verdict = "TAILWIND"
         modifier = cfg.MOD_SECTOR_TAILWIND
+    elif improving:
+        verdict = "IMPROVING"
+        modifier = 0
     elif alpha <= 0 or not above_ema50:
         verdict = "HEADWIND"
         modifier = cfg.MOD_SECTOR_HEADWIND
@@ -147,6 +177,8 @@ def analyze_sector(ticker: str) -> SectorResult:
         etf_above_ema50=above_ema50,
         etf_above_ema200=above_ema200,
         relative_strength=round(alpha * 100, 2),
+        alpha_10d=round(alpha_10d * 100, 2),
+        improving=improving,
         rs_market_cond=rs_market_cond,
         rs_label=rs_label,
         macd_positive=macd_positive,
@@ -155,7 +187,9 @@ def analyze_sector(ticker: str) -> SectorResult:
         rs_direction=rs_direction,
     )
     logger.info(
-        "Sector: %s (ETF=%s)  Alpha=%.2f%%  EMA50=%s  Verdict=%s  Mod=%+d",
-        sector, etf_symbol, alpha*100, above_ema50, verdict, modifier,
+        "Sector: %s (ETF=%s)  Alpha20D=%.2f%%  Alpha10D=%.2f%%  Improving=%s  "
+        "EMA50=%s  Verdict=%s  Mod=%+d",
+        sector, etf_symbol, alpha*100, alpha_10d*100, improving,
+        above_ema50, verdict, modifier,
     )
     return result
