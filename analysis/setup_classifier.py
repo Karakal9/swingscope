@@ -114,39 +114,49 @@ def _score_rvol(df: pd.DataFrame) -> ScoreFactor:
     rvol_last = float(df["RVOL"].iloc[-1])
     # Check pullback dryness (prior bars) and reversal spike (last bar)
     rvol_prior = df["RVOL"].iloc[-4:-1].mean() if len(df) >= 4 else rvol_last
-    dry = rvol_prior < 0.8
-    spike = rvol_last > 1.3
+    
+    dry = rvol_prior < 0.85
+    spike = rvol_last > 1.20
+    controlled = 0.85 <= rvol_prior <= 1.30
 
     if dry and spike:
         return ScoreFactor("Volume — RVol", cfg.SCORE_RVOL_MAX, 15,
                            f"Dry pullback ({rvol_prior:.2f}) + spike ({rvol_last:.2f})")
     if dry or spike:
         detail = f"Dry pullback ({rvol_prior:.2f})" if dry else f"Spike ({rvol_last:.2f})"
-        return ScoreFactor("Volume — RVol", cfg.SCORE_RVOL_MAX, 8, detail)
+        return ScoreFactor("Volume — RVol", cfg.SCORE_RVOL_MAX, 15 if dry else 10, detail)
+    
+    if controlled:
+        return ScoreFactor("Volume — RVol", cfg.SCORE_RVOL_MAX, 8, f"Controlled ({rvol_prior:.2f})")
+
     return ScoreFactor("Volume — RVol", cfg.SCORE_RVOL_MAX, 0,
                        f"No confirmation (prior={rvol_prior:.2f}, last={rvol_last:.2f})")
 
 
-def score_rsi_context(rsi: float, direction: str = "LONG") -> tuple[int, str, bool, str]:
+def score_rsi_context(rsi: float, trend: Trend = Trend.RANGE, direction: str = "LONG") -> tuple[int, str, bool, str]:
     """Returns (points, label, is_invalid, warning_flag)."""
+    # Relaxed RSI for Strong Uptrends
+    ideal_high = 62.0 if trend == Trend.STRONG_UPTREND else 58.0
+    valid_high = 68.0 if trend == Trend.STRONG_UPTREND else 65.0
+
     if rsi < 35:
         return 0, "INVALIDATED_OVERSOLD", True, ""
     elif 35 <= rsi < 40:
         return 7, "DEEP_FLUSH", False, "DEEP_FLUSH_RSI"
-    elif 40 <= rsi <= 58:
+    elif 40 <= rsi <= ideal_high:
         return 15, "IDEAL_RESET", False, ""
-    elif 58 < rsi <= 65:
+    elif ideal_high < rsi <= valid_high:
         return 5, "INSUFFICIENT_RESET", False, ""
     else:
         return 0, "INVALIDATED_OVERBOUGHT", True, ""
 
 
-def _score_rsi(df: pd.DataFrame) -> ScoreFactor:
+def _score_rsi(df: pd.DataFrame, trend: Trend = Trend.RANGE) -> ScoreFactor:
     """Score factor 4 — RSI Context (max 15)."""
     if "RSI_14" not in df.columns:
         return ScoreFactor("RSI Context", cfg.SCORE_RSI_MAX, 0, "No RSI")
     rsi = float(df["RSI_14"].iloc[-1])
-    pts, label, _, _ = score_rsi_context(rsi, "LONG")
+    pts, label, _, _ = score_rsi_context(rsi, trend, "LONG")
     return ScoreFactor("RSI Context", cfg.SCORE_RSI_MAX, pts, f"{label} ({rsi:.1f})")
 
 
@@ -302,7 +312,7 @@ def _check_ema_pullback(df: pd.DataFrame, patterns: list[PatternMatch], structur
         hard_reasons.append("Close below EMA200")
 
     rsi = float(last["RSI_14"]) if "RSI_14" in df.columns else 50
-    _, rsi_label, is_invalid, rsi_warn = score_rsi_context(rsi, "LONG")
+    _, rsi_label, is_invalid, rsi_warn = score_rsi_context(rsi, structure.trend, "LONG")
     if is_invalid:
         hard_reasons.append(f"RSI {rsi_label} ({rsi:.1f})")
     elif rsi_label == "INSUFFICIENT_RESET":
@@ -316,9 +326,12 @@ def _check_ema_pullback(df: pd.DataFrame, patterns: list[PatternMatch], structur
 
     confirmed_patterns = [p for p in patterns if p.confirmed]
     if not confirmed_patterns:
-        hard_reasons.append("No confirmed candlestick reversal pattern")
+        if structure.trend != Trend.STRONG_UPTREND:
+            hard_reasons.append("No confirmed candlestick reversal pattern")
+        else:
+            soft_reasons.append("No confirmed candlestick reversal pattern (Leader Discretion)")
 
-    # Proximity to EMA21 or EMA50 (scored via factor, not binary killed here)
+    # Proximity to EMA21 or EMA50
     atr = float(last["ATR_14"]) if "ATR_14" in df.columns else 1
     ema21 = float(last["EMA_21"])
     near = min(abs(close - ema21), abs(close - ema50)) <= cfg.EMA_PULLBACK_ATR_PROXIMITY * atr
@@ -333,7 +346,10 @@ def _check_ema_pullback(df: pd.DataFrame, patterns: list[PatternMatch], structur
             
     is_dry, avg_rvol = check_pullback_volume(df, structure, threshold=0.90)
     if not is_dry:
-        soft_reasons.append(f"Pullback volume not dry (avg RVol={avg_rvol:.2f})")
+        if structure.trend != Trend.STRONG_UPTREND:
+            soft_reasons.append(f"Pullback volume not dry (avg RVol={avg_rvol:.2f})")
+        else:
+            warnings.append(f"Institutional Accumulation (avg RVol={avg_rvol:.2f})")
 
     return len(hard_reasons) == 0, hard_reasons, soft_reasons, warnings
 
@@ -776,6 +792,14 @@ def classify_setups(
 
     # ── Universal hard invalidation gates ────────────────────
     hard_gates: list[str] = []
+    common_warnings: list[str] = []
+    
+    # Universal 200 EMA Gate (Stage 4 Filter)
+    close = float(last["Close"])
+    ema200 = float(last.get("EMA_200", 0))
+    if close < ema200:
+        hard_gates.append(f"Below EMA200 ({ema200:.2f}) — STAGE 4 DOWNTREND REJECT")
+
     if structure.trend == Trend.DOWNTREND:
         hard_gates.append(f"Price below EMA50 — NO LONG SETUP")
         
@@ -802,12 +826,13 @@ def classify_setups(
     elif price_momentum_grade == 2:
         context_modifier -= 5
 
-    # OBV divergence (computed in scorer, but we flag it here too)
+    # OBV divergence (downgraded to penalty for trending stocks)
     if "OBV" in df.columns and len(df) >= 20:
         obv_slope = np.polyfit(range(20), df["OBV"].iloc[-20:].values, 1)[0]
         price_slope = np.polyfit(range(20), df["Close"].iloc[-20:].values, 1)[0]
         if price_slope > 0 and obv_slope < 0:
-            hard_gates.append("OBV bearish divergence detected")
+            context_modifier -= 5
+            common_warnings.append("OBV BEARISH DIVERGENCE — accumulation lagging price")
 
     # ── Guardrail: Weekly Distribution Wicks ──────────────────
     is_distribution, wick_count = check_weekly_distribution_wicks(weekly_df)
@@ -845,7 +870,7 @@ def classify_setups(
     f_trend = _score_trend(structure.trend)
     f_pattern = _score_pattern(patterns)
     f_rvol = _score_rvol(df)
-    f_rsi = _score_rsi(df)
+    f_rsi = _score_rsi(df, structure.trend)
     f_obv = _score_obv(df)
     f_macd = _score_macd(df)
     f_vp = _score_vp_confluence(current_price, vp, atr)
@@ -879,7 +904,7 @@ def classify_setups(
         factors = [ScoreFactor(f.name, f.max_pts, f.earned, f.detail) for f in common_factors]
         final = max(0, min(100, raw + context_modifier))
 
-        warnings: list[str] = list(checker_warnings)
+        warnings: list[str] = list(checker_warnings) + common_warnings
         hard_inv = len(hard_gates) > 0 or len(hard_reasons) > 0
 
         # Hard kills: zero the score
@@ -920,11 +945,22 @@ def classify_setups(
                 final = min(final, 50)
                 warnings.append(f"FALSE BREAKOUT warning — RVol={rvol:.2f}")
                 
-        # EMA Pullback Pass-Through Fix
-        if setup_type == SetupType.EMA_PULLBACK and final < 40:
-            hard_reasons.append(f"EMA Pullback score < 40 ({final}) — Pattern not validated")
-            final = 0
-            hard_inv = True
+        # EMA Pullback: A-Tier Leader Logic
+        if setup_type == SetupType.EMA_PULLBACK:
+            if structure.trend == Trend.STRONG_UPTREND:
+                # Discretionary: In a strong trend, the 'constructive flag' is a valid pattern.
+                if f_pattern.earned == 0:
+                    final = min(100, final + 15)  # Award bonus for constructive consolidation
+                    warnings.append(f"A-TIER: Constructive Flag consolidation in strong uptrend")
+                
+                # Episodic Pivot Check: Reward high-volume earnings drifts
+                if rvol_avg_val > 0.85: 
+                    final = min(100, final + 10) # Offset volume penalty for institutional accumulation
+                    warnings.append("Institutional Accumulation — RVol sustained during pullback")
+            elif final < 40:
+                hard_reasons.append(f"EMA Pullback score < 40 ({final}) — Pattern not validated")
+                final = 0
+                hard_inv = True
             
         # Compliance Gap Hard Gate
         if setup_type in (SetupType.FIB_PULLBACK, SetupType.BULL_FLAG) and final < 50:
